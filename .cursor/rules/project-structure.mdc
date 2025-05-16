@@ -1,0 +1,35 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# 图片生成提示词 MCP Server 项目结构
+
+## 目录结构
+```
+/
+├── src/                    # 源代码目录
+│   ├── tools/             # MCP 工具实现
+│   │   ├── templates.ts   # 模板相关工具
+│   │   └── prompts.ts     # 提示词生成工具
+│   ├── models/            # 数据模型定义
+│   │   ├── template.ts    # 模板数据结构
+│   │   └── prompt.ts      # 提示词数据结构
+│   └── utils/             # 工具函数
+├── templates/             # 模板文件存储
+│   ├── children-book/     # 儿童书籍模板
+│   ├── tech-doc/         # 技术文档模板
+│   └── marketing/        # 营销内容模板
+└── tests/                # 测试文件
+```
+
+## 核心文件
+- [src/tools/templates.ts](mdc:src/tools/templates.ts) - 实现模板管理相关的 MCP 工具
+- [src/tools/prompts.ts](mdc:src/tools/prompts.ts) - 实现提示词生成相关的工具
+- [src/models/template.ts](mdc:src/models/template.ts) - 定义模板数据结构和验证
+
+## 开发指南
+1. 所有 MCP 工具实现都在 `src/tools` 目录下
+2. 模板文件采用 JSON 格式存储在 `templates` 目录
+3. 数据模型和接口定义都在 `src/models` 目录
+4. 工具函数和辅助代码放在 `src/utils` 目录

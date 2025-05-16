@@ -1,0 +1,44 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# MCP 工具实现指南
+
+## 工具列表
+1. **listTemplates**
+   - 实现文件: [src/tools/templates.ts](mdc:src/tools/templates.ts)
+   - 功能: 列出所有可用的提示词模板
+   - 无需参数
+
+2. **getTemplate**
+   - 实现文件: [src/tools/templates.ts](mdc:src/tools/templates.ts)
+   - 功能: 获取指定模板的详细定义
+   - 参数: 模板 ID
+
+3. **createTemplateFromImage**
+   - 实现文件: [src/tools/templates.ts](mdc:src/tools/templates.ts)
+   - 功能: 根据图片生成模板
+   - 支持 sampling 和非 sampling 两种模式
+   - 参数: 图片文件地址
+
+4. **createTemplate**
+   - 实现文件: [src/tools/templates.ts](mdc:src/tools/templates.ts)
+   - 功能: 手动创建新模板
+   - 参数: 模板名称、描述、分类、参数对象
+
+5. **generatePrompt**
+   - 实现文件: [src/tools/prompts.ts](mdc:src/tools/prompts.ts)
+   - 功能: 生成提示词
+   - 参数: 模板 ID、参数覆盖对象
+
+## Sampling 处理
+- 检查 Client capabilities 中的 sampling 支持
+- 根据支持情况选择不同的处理流程
+- 对于不支持 sampling 的客户端提供替代方案
+
+## 开发注意事项
+1. 所有工具都需要处理 sampling 不可用的情况
+2. 提供清晰的错误信息和状态码
+3. 验证所有输入参数
+4. 保持与 MCP 规范的兼容性

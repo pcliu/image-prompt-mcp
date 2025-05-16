@@ -1,0 +1,55 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# 模板结构指南
+
+## 模板存储
+```
+templates/
+├── children-book/
+│   ├── basic.json       # 基础儿童书籍模板
+│   ├── computer.json    # 计算机主题模板
+│   └── science.json     # 科学主题模板
+├── tech-doc/
+│   ├── api.json        # API文档模板
+│   └── architecture.json # 架构图模板
+└── marketing/
+    ├── social.json     # 社交媒体模板
+    └── banner.json     # 广告横幅模板
+```
+
+## 模板格式
+```typescript
+interface Template {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  parameters: {
+    subject: string;
+    action?: string;
+    environment?: string;
+    cameraAngle?: string;
+    style?: string;
+    details?: string;
+    lighting?: string;
+    mood?: string;
+    technical?: string;
+    quality?: string;
+    negativePrompt?: string;
+  };
+  metadata: {
+    createdAt: string;
+    updatedAt: string;
+    version: number;
+  };
+}
+```
+
+## 开发规范
+1. 模板文件必须使用 `.json` 扩展名
+2. 所有模板必须包含必需字段（id, name, description, category）
+3. 参数字段可以部分缺失，将使用默认值
+4. 建议为每个类别创建基础模板作为默认值来源
