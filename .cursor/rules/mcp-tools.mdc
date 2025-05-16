@@ -1,6 +1,6 @@
 ---
-description:
-globs:
+description: 
+globs: 
 alwaysApply: false
 ---
 # MCP 工具实现指南
@@ -27,18 +27,27 @@ alwaysApply: false
    - 功能: 手动创建新模板
    - 参数: 模板名称、描述、分类、参数对象
 
-5. **generatePrompt**
+5. **generateImage**
+   - 实现文件: [src/tools/images.ts](mdc:src/tools/images.ts)
+   - 功能: 根据模板生成图片
+   - 参数: 模板 ID、参数覆盖对象（可选）
+   - 支持 sampling 和非 sampling 两种模式
+
+6. **[内部方法] generatePrompt**
    - 实现文件: [src/tools/prompts.ts](mdc:src/tools/prompts.ts)
    - 功能: 生成提示词
    - 参数: 模板 ID、参数覆盖对象
+   - 说明: 作为内部方法被 generateImage 调用
 
 ## Sampling 处理
 - 检查 Client capabilities 中的 sampling 支持
 - 根据支持情况选择不同的处理流程
 - 对于不支持 sampling 的客户端提供替代方案
+- 支持图片生成和模板创建两种场景
 
 ## 开发注意事项
 1. 所有工具都需要处理 sampling 不可用的情况
 2. 提供清晰的错误信息和状态码
 3. 验证所有输入参数
 4. 保持与 MCP 规范的兼容性
+5. generatePrompt 作为内部方法，不对外暴露

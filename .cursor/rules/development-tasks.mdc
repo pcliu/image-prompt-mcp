@@ -1,5 +1,5 @@
 ---
-description: 任务进度跟踪：在开启新任务时，需要了解当前的进度；当完成任务后，需要更新任务进度；如果在开发过程中，发现任务不合理，可以调整任务。
+description: 
 globs: 
 alwaysApply: false
 ---
@@ -21,34 +21,36 @@ alwaysApply: false
 - [ ] 添加必要的依赖项
 - [ ] 创建基础目录结构
 
-### 2. 提示词生成功能 [🔲]
-- [ ] 创建手动测试模板 [templates/test/basic.json](mdc:templates/test/basic.json)
-  - [ ] 定义完整的模板参数
-  - [ ] 添加示例值
-  - [ ] 准备多个场景的测试数据
-- [ ] 实现 generatePrompt [src/tools/prompts.ts](mdc:src/tools/prompts.ts)
+### 2. 图片生成功能 [🔲]
+- [ ] 实现内部 generatePrompt @src/tools/prompts.ts
   - [ ] 参数验证逻辑
   - [ ] 提示词组装逻辑
   - [ ] 错误处理
+- [ ] 实现 generateImage [src/tools/images.ts](mdc:src/tools/images.ts)
+  - [ ] Client capabilities 检查
+  - [ ] Sampling 支持处理
+  - [ ] 内部 generatePrompt 调用
+  - [ ] 错误处理机制
 - [ ] 编写单元测试
   - [ ] 基本功能测试
-  - [ ] 参数覆盖测试
+  - [ ] Sampling 支持测试
   - [ ] 错误场景测试
 - [ ] 手动验证
-  - [ ] 使用测试模板生成提示词
-  - [ ] 验证生成的提示词质量
-  - [ ] 收集优化建议
+  - [ ] 支持 sampling 的场景测试
+  - [ ] 不支持 sampling 的场景测试
+  - [ ] 验证生成的图片质量
 
 ### 3. 模板管理功能 [🔲]
 - [ ] 实现 listTemplates [src/tools/templates.ts](mdc:src/tools/templates.ts)
 - [ ] 实现 getTemplate
 - [ ] 实现 createTemplate
+- [ ] 实现 createTemplateFromImage
 - [ ] 添加参数验证
 - [ ] 编写单元测试
 
 ### 4. Sampling 集成 [🔲]
-- [ ] 实现 checkSamplingSupport [src/utils/sampling.ts](mdc:src/utils/sampling.ts)
-- [ ] 实现 handleSamplingRequest
+- [ ] 实现 checkSamplingSupport [src/sampling/checker.ts](mdc:src/sampling/checker.ts)
+- [ ] 实现 handleSamplingRequest [src/sampling/handler.ts](mdc:src/sampling/handler.ts)
 - [ ] 实现 processSamplingResponse
 - [ ] 添加错误处理
 - [ ] 编写集成测试
@@ -63,10 +65,10 @@ alwaysApply: false
 ## 优化任务
 
 ### P1 - 重要功能 [🔲]
-- [ ] 提示词生成优化
+- [ ] 图片生成优化
   - [ ] 基于验证结果优化生成逻辑
-  - [ ] 添加更多模板参数
-  - [ ] 实现提示词模板
+  - [ ] 添加更多生成参数
+  - [ ] 实现图片生成模板
 - [ ] 模板版本控制
   - [ ] 实现版本号管理
   - [ ] 添加版本历史记录
@@ -136,4 +138,5 @@ interface ProgressUpdate {
 
 ### 更新历史
 - 2024-05-16: 项目启动，完成 PRD 文档
+- 2024-05-16: 更新 PRD，添加 generateImage 工具，调整 generatePrompt 为内部方法
 - [在此添加后续更新...]

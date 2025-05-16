@@ -96,11 +96,28 @@
          - 支持部分参数填写，未填写参数将使用默认值
          - 可以作为 createTemplateFromImage 的备选方案
          - 适用于所有客户端，不依赖 sampling 能力
-     - **generatePrompt**: 生成提示词
+     - **generateImage**: 根据模板生成图片
        - 输入：
          - 模板 id
          - 参数覆盖（可选）：用于覆盖模板中的默认参数
-       - 输出：生成的提示词
+       - 输出：
+         - 支持 sampling 时：生成的图片
+         - 不支持 sampling 时：生成的提示词
+       - 工作流程：
+         1. Server 检查 Client 的 capabilities
+         2. 如果支持 sampling：
+            - Server 内部调用 generatePrompt 生成提示词
+            - Server 发起 sampling/createImage 请求
+            - Client（Host）收到 sampling 请求，进行图片生成
+            - Client 将生成的图片返回给 Server
+            - Server 返回图片给用户
+         3. 如果不支持 sampling：
+            - Server 内部调用 generatePrompt 生成提示词
+            - Server 直接返回提示词给用户
+       - 说明：
+         - 统一了图片生成的入口
+         - 根据客户端能力提供不同的服务级别
+         - generatePrompt 作为内部方法被封装
 
   2. **MCP Sampling 功能**:
      - **图片分析采样**:
