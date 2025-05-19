@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { Template } from '../models/template.js';
 
 // 定义提示词生成的参数验证模式
 const PromptGenerationParams = z.object({
@@ -30,12 +31,23 @@ interface PromptResult {
 /**
  * 内部函数：生成图片提示词
  * @param params 提示词生成参数
+ * @param template 可选的模板对象，如果提供则会使用模板参数作为默认值
  * @returns 生成的提示词结果，包含主提示词和可选的负面提示词
  */
-export async function generatePrompt(params: PromptGenerationParamsType): Promise<PromptResult> {
+export async function generatePrompt(params: PromptGenerationParamsType, template?: Template): Promise<PromptResult> {
   try {
-    // 验证输入参数
-    const validatedParams = PromptGenerationParams.parse(params);
+    // 如果提供了模板，则合并模板参数和用户参数
+    let mergedParams = { ...params };
+    if (template) {
+      // 模板参数作为默认值，用户参数优先
+      mergedParams = {
+        ...template.parameters,
+        ...params,
+      };
+    }
+
+    // 验证合并后的输入参数
+    const validatedParams = PromptGenerationParams.parse(mergedParams);
 
     // 构建提示词组件
     const components = [

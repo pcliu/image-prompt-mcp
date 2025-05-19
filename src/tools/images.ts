@@ -3,6 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { generatePrompt } from './prompts.js';
 import { checkSamplingSupport } from '../sampling/checker.js';
 import { handleSamplingRequest, SamplingServer } from '../sampling/handler.js';
+import { getTemplateById, TemplateError, TemplateErrorType } from './templates.js';
 
 // 定义错误类型
 export enum ImageGenerationErrorType {
@@ -28,9 +29,10 @@ export class ImageGenerationError extends Error {
 const ImageGenerationParams = {
   // 模板相关参数
   templateId: z.string().optional().describe('模板 ID，如果提供则使用模板默认参数'),
+  templateVersion: z.number().int().positive().optional().describe('模板版本'),
   
   // 基础参数
-  subject: z.string().min(1).describe('主体内容 - 明确"画什么"'),
+  subject: z.string().optional().describe('主体内容 - 明确"画什么"'),
   action: z.string().optional().describe('动作/姿态 - 如果主体在做事或有特定姿势'),
   environment: z.string().optional().describe('场景与背景 - 交代地点、时代、天气、室内外等'),
   
@@ -53,19 +55,6 @@ const ImageGenerationParams = {
 };
 
 /**
- * 从模板加载参数
- * @param templateId 模板 ID
- * @returns 模板参数
- */
-async function loadTemplateParams(templateId: string): Promise<Record<string, unknown>> {
-  // TODO: 实现从模板存储加载参数
-  throw new ImageGenerationError(
-    ImageGenerationErrorType.INVALID_TEMPLATE,
-    `模板 ${templateId} 不存在`
-  );
-}
-
-/**
  * 注册图片生成工具到 MCP 服务器
  * @param server MCP 服务器实例
  */
@@ -77,17 +66,28 @@ export function registerImageGenerationTool(server: McpServer & SamplingServer) 
       try {
         // 1. 处理模板参数
         let finalParams = { ...params };
+        let template = undefined;
+
         if (params.templateId) {
           try {
-            const templateParams = await loadTemplateParams(params.templateId);
-            // 用用户提供的参数覆盖模板默认参数
-            finalParams = {
-              ...templateParams,
-              ...params,
-            };
+            // 从模板存储加载模板
+            template = getTemplateById(params.templateId, params.templateVersion);
+            
+            // 确保至少有一个subject (从模板或用户参数)
+            if (!params.subject && !template.parameters.subject) {
+              throw new ImageGenerationError(
+                ImageGenerationErrorType.INVALID_PARAMETERS,
+                '必须提供主体内容 (subject) 参数'
+              );
+            }
           } catch (error) {
-            if (error instanceof ImageGenerationError) {
-              throw error;
+            if (error instanceof TemplateError) {
+              if (error.type === TemplateErrorType.TEMPLATE_NOT_FOUND) {
+                throw new ImageGenerationError(
+                  ImageGenerationErrorType.INVALID_TEMPLATE,
+                  error.message
+                );
+              }
             }
             throw new ImageGenerationError(
               ImageGenerationErrorType.INTERNAL_ERROR,
@@ -95,10 +95,23 @@ export function registerImageGenerationTool(server: McpServer & SamplingServer) 
               error
             );
           }
+        } else if (!params.subject) {
+          // 如果没有提供模板ID，则必须提供subject
+          throw new ImageGenerationError(
+            ImageGenerationErrorType.INVALID_PARAMETERS,
+            '必须提供主体内容 (subject) 参数或者有效的模板ID'
+          );
         }
 
         // 2. 生成提示词
-        const promptResult = await generatePrompt(finalParams);
+        // 确保提供有效的 subject 给 generatePrompt 函数
+        if (!finalParams.subject && template?.parameters.subject) {
+          finalParams = {
+            ...finalParams,
+            subject: template.parameters.subject
+          };
+        }
+        const promptResult = await generatePrompt(finalParams as { subject: string, [key: string]: any }, template);
 
         // 3. 检查客户端 sampling 支持
         const supportsSampling = checkSamplingSupport(extra);
@@ -147,6 +160,11 @@ export function registerImageGenerationTool(server: McpServer & SamplingServer) 
                   height: finalParams.height,
                   samplingSteps: finalParams.samplingSteps,
                 },
+                usedTemplate: template ? {
+                  id: template.id,
+                  name: template.name,
+                  version: template.version,
+                } : undefined
               },
             };
           } catch (error) {
@@ -156,7 +174,7 @@ export function registerImageGenerationTool(server: McpServer & SamplingServer) 
               error
             );
           }
-        } else {
+        }
           // 返回生成的提示词
           const promptText = `提示词生成成功（客户端不支持直接生成图片）:\n\nPrompt: ${
             promptResult.prompt
@@ -169,6 +187,7 @@ export function registerImageGenerationTool(server: McpServer & SamplingServer) 
               width: finalParams.width,
               height: finalParams.height,
               samplingSteps: finalParams.samplingSteps,
+              usedTemplate: template ? `${template.name} (ID: ${template.id}, 版本: ${template.version})` : '无'
             },
             null,
             2
@@ -190,9 +209,13 @@ export function registerImageGenerationTool(server: McpServer & SamplingServer) 
                 samplingSteps: finalParams.samplingSteps,
               },
               supportsSampling: false,
+              usedTemplate: template ? {
+                id: template.id,
+                name: template.name,
+                version: template.version,
+              } : undefined
             },
           };
-        }
       } catch (error) {
         if (error instanceof ImageGenerationError) {
           throw error;

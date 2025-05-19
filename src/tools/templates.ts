@@ -248,6 +248,33 @@ function parseAnalysisToTemplateParams(analysis: string): Partial<TemplateParame
 }
 
 /**
+ * 根据ID获取模板
+ * @param id 模板ID
+ * @param version 可选的版本号
+ * @returns 找到的模板，如果没找到则抛出异常
+ */
+export function getTemplateById(id: string, version?: number): Template {
+  const template = templates.find(t => t.id === id);
+  
+  if (!template) {
+    throw new TemplateError(
+      TemplateErrorType.TEMPLATE_NOT_FOUND,
+      `模板 ${id} 不存在`
+    );
+  }
+
+  // 如果指定了版本，检查版本是否匹配
+  if (version && template.version !== version) {
+    throw new TemplateError(
+      TemplateErrorType.TEMPLATE_NOT_FOUND,
+      `模板 ${id} 的版本 ${version} 不存在`
+    );
+  }
+
+  return template;
+}
+
+/**
  * 注册模板管理工具到 MCP 服务器
  * @param server MCP 服务器实例
  */
