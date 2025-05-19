@@ -45,7 +45,7 @@
     - sampling/ - Sampling 测试
     - integration/ - 集成测试
 
-### 2. 模板管理功能 [🏗️]
+### 2. 模板管理功能 [✅]
 - [✅] 实现模板数据结构 [src/models/template.ts](mdc:src/models/template.ts)
   - [✅] 定义模板基本结构
   - [✅] 添加版本控制字段
@@ -66,10 +66,17 @@
   - [✅] 实现图片分析
   - [✅] 提取模板参数
   - [✅] 生成模板结构
-- [ ] 编写单元测试
-  - [ ] 基本功能测试
-  - [ ] 参数验证测试
-  - [ ] 错误处理测试
+- [✅] 实现 updateTemplate
+  - [✅] 实现模板更新功能
+  - [✅] 添加版本管理
+  - [✅] 添加参数验证
+- [✅] 实现 deleteTemplate
+  - [✅] 实现模板删除功能
+  - [✅] 添加错误处理
+- [✅] 编写单元测试
+  - [✅] 基本功能测试
+  - [✅] 参数验证测试
+  - [✅] 错误处理测试
 
 ### 3. 图片生成功能 [🔄]
 - [🔄] 重构 generatePrompt 以支持模板 @src/tools/prompts.ts
@@ -193,3 +200,6 @@ interface ProgressUpdate {
 - 2024-05-17: 调整开发顺序，将模板管理功能提前，标记已实现的图片生成功能为需要重构
 - 2024-05-17: 完成 Sampling 集成的主要功能实现，包括 checkSamplingSupport、handleSamplingRequest 和 processSamplingResponse
 - 2024-05-17: 完成 Sampling 集成测试的编写和验证
+- 2024-05-27: 完成模板管理功能的所有工具实现，包括 listTemplates、getTemplate、createTemplate、createTemplateFromImage、updateTemplate 和 deleteTemplate
+- 2024-05-27: 实现模板管理功能的单元测试，包括基本功能测试、参数验证测试和错误处理测试
+- 2024-05-27: 修复模板管理功能的所有单元测试问题，更新开发任务进度

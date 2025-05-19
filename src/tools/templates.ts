@@ -664,4 +664,183 @@ export function registerTemplateTools(server: McpServer) {
       }
     }
   );
+
+  // 定义更新模板参数
+  const UpdateTemplateParams = {
+    id: {
+      type: 'string',
+      description: '模板ID',
+    },
+    name: {
+      type: 'string',
+      description: '模板名称',
+      minLength: 1,
+      maxLength: 100,
+      optional: true,
+    },
+    description: {
+      type: 'string',
+      description: '模板描述',
+      maxLength: 500,
+      optional: true,
+    },
+    category: {
+      type: 'string',
+      description: '模板分类',
+      enum: ['children-book', 'tech-doc', 'marketing'],
+      optional: true,
+    },
+    parameters: {
+      type: 'object',
+      description: '模板参数',
+      optional: true,
+    },
+    isActive: {
+      type: 'boolean',
+      description: '是否激活',
+      optional: true,
+    },
+  };
+
+  // 注册 updateTemplate 工具
+  server.tool(
+    'updateTemplate',
+    {
+      title: '更新模板',
+      description: '更新现有的提示词模板',
+      parameters: UpdateTemplateParams,
+    },
+    async (args: { [key: string]: any }) => {
+      try {
+        // 查找模板
+        const templateIndex = templates.findIndex(t => t.id === args.id);
+        
+        if (templateIndex === -1) {
+          throw new TemplateError(
+            TemplateErrorType.TEMPLATE_NOT_FOUND,
+            `模板 ${args.id} 不存在`
+          );
+        }
+
+        const template = templates[templateIndex];
+        
+        // 更新模板字段
+        if (args.name !== undefined) template.name = args.name;
+        if (args.description !== undefined) template.description = args.description;
+        if (args.category !== undefined) template.category = args.category as Template['category'];
+        if (args.parameters !== undefined) {
+          // 确保保留必要的 subject 字段
+          if (!args.parameters.subject && template.parameters.subject) {
+            args.parameters.subject = template.parameters.subject;
+          }
+          template.parameters = args.parameters as TemplateParameters;
+        }
+        if (args.isActive !== undefined) template.isActive = args.isActive;
+        
+        // 更新版本和时间
+        template.version += 1;
+        template.updatedAt = new Date();
+
+        // 验证更新后的模板
+        try {
+          validateTemplate(template);
+        } catch (validationError) {
+          throw new TemplateError(
+            TemplateErrorType.INVALID_PARAMETERS,
+            '更新的模板参数无效',
+            validationError
+          );
+        }
+
+        // 返回结果
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `更新成功: ${template.name}`,
+            },
+          ],
+          structuredContent: {
+            template: {
+              id: template.id,
+              name: template.name,
+              description: template.description,
+              category: template.category,
+              version: template.version,
+              createdAt: template.createdAt,
+              updatedAt: template.updatedAt,
+              parameters: template.parameters,
+              isActive: template.isActive,
+            },
+          },
+        };
+      } catch (error) {
+        if (error instanceof TemplateError) {
+          throw error;
+        }
+        throw new TemplateError(
+          TemplateErrorType.INTERNAL_ERROR,
+          '更新模板失败',
+          error
+        );
+      }
+    }
+  );
+
+  // 定义删除模板参数
+  const DeleteTemplateParams = {
+    id: {
+      type: 'string',
+      description: '要删除的模板ID',
+    },
+  };
+
+  // 注册 deleteTemplate 工具
+  server.tool(
+    'deleteTemplate',
+    {
+      title: '删除模板',
+      description: '删除一个提示词模板',
+      parameters: DeleteTemplateParams,
+    },
+    async (args: { [key: string]: any }) => {
+      try {
+        // 查找模板
+        const templateIndex = templates.findIndex(t => t.id === args.id);
+        
+        if (templateIndex === -1) {
+          throw new TemplateError(
+            TemplateErrorType.TEMPLATE_NOT_FOUND,
+            `模板 ${args.id} 不存在`
+          );
+        }
+
+        // 从数组中删除
+        templates.splice(templateIndex, 1);
+
+        // 返回结果
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `删除成功`,
+            },
+          ],
+          structuredContent: {
+            success: true,
+            id: args.id,
+          },
+        };
+      } catch (error) {
+        if (error instanceof TemplateError) {
+          throw error;
+        }
+        throw new TemplateError(
+          TemplateErrorType.INTERNAL_ERROR,
+          '删除模板失败',
+          error
+        );
+      }
+    }
+  );
 }
