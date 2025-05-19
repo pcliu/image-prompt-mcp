@@ -1,0 +1,23 @@
+{
+  "id": "b1e1a1c0-1002-4000-8000-000000000004",
+  "name": "系统架构图",
+  "description": "展示微服务架构的技术文档插图，结构分明。",
+  "category": "tech-doc",
+  "parameters": {
+    "subject": "微服务系统架构",
+    "action": "展示各服务之间的连接关系",
+    "environment": "白色或浅灰色背景",
+    "cameraAngle": "正视图",
+    "style": "简约线框图，蓝灰色调",
+    "details": "每个服务用矩形框表示，连线有箭头",
+    "lighting": "无",
+    "mood": "理性、严谨",
+    "technical": "高清，A4横向",
+    "quality": "结构清晰，标签易读",
+    "negativePrompt": "不要出现卡通、手绘风格"
+  },
+  "version": 1,
+  "createdAt": "2024-05-20T08:00:00.000Z",
+  "updatedAt": "2024-05-20T08:00:00.000Z",
+  "isActive": true
+} 

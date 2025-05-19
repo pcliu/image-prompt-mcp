@@ -1,3 +1,8 @@
+---
+description: 在进行功能开发时，需要从 PRD 文档中获取详细的功能需求。
+globs: 
+alwaysApply: false
+---
 # 产品需求文档 (PRD)
 
 ## 1. 概述

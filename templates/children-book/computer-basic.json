@@ -1,0 +1,23 @@
+{
+  "id": "b1e1a1c0-0001-4000-8000-000000000001",
+  "name": "计算机原理启蒙插图",
+  "description": "适用于6岁儿童的计算机原理启蒙书籍插图，风格温馨、色彩明快。",
+  "category": "children-book",
+  "parameters": {
+    "subject": "一台拟人化的可爱电脑",
+    "action": "微笑着向小朋友挥手",
+    "environment": "明亮的儿童房，书桌上有彩色文具",
+    "cameraAngle": "正面视角，略带俯视",
+    "style": "卡通插画，线条柔和",
+    "details": "电脑屏幕上有笑脸，桌面有彩色铅笔和书本",
+    "lighting": "柔和自然光",
+    "mood": "温馨、友好",
+    "technical": "高清，4:3比例",
+    "quality": "高分辨率，细节丰富",
+    "negativePrompt": "不要出现恐怖、黑暗元素"
+  },
+  "version": 1,
+  "createdAt": "2024-05-20T08:00:00.000Z",
+  "updatedAt": "2024-05-20T08:00:00.000Z",
+  "isActive": true
+} 

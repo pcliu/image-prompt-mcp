@@ -1,6 +1,6 @@
 ---
-description:
-globs:
+description: 项目目录结构和核心文件
+globs: 
 alwaysApply: false
 ---
 # 图片生成提示词 MCP Server 项目结构

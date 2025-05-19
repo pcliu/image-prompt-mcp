@@ -1,0 +1,23 @@
+{
+  "id": "b1e1a1c0-2002-4000-8000-000000000006",
+  "name": "电商广告横幅",
+  "description": "适合电商平台首页的广告横幅，突出商品和折扣信息。",
+  "category": "marketing",
+  "parameters": {
+    "subject": "热销商品图片和折扣标签",
+    "action": "突出显示\"限时抢购\"",
+    "environment": "明亮背景，带有促销气泡",
+    "cameraAngle": "正面视角",
+    "style": "电商风格，色彩丰富",
+    "details": "商品图片、价格、折扣标签",
+    "lighting": "明亮灯光",
+    "mood": "兴奋、吸引力强",
+    "technical": "1920x600像素，适配PC端",
+    "quality": "高清，细节清晰",
+    "negativePrompt": "不要出现模糊、无关商品"
+  },
+  "version": 1,
+  "createdAt": "2024-05-20T08:00:00.000Z",
+  "updatedAt": "2024-05-20T08:00:00.000Z",
+  "isActive": true
+} 

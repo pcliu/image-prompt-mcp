@@ -1,0 +1,23 @@
+{
+  "id": "b1e1a1c0-0002-4000-8000-000000000002",
+  "name": "科学实验小课堂插图",
+  "description": "适合儿童科普书籍的实验场景插图，突出趣味性和安全感。",
+  "category": "children-book",
+  "parameters": {
+    "subject": "两个小朋友在做科学实验",
+    "action": "一起观察烧杯中的彩色液体",
+    "environment": "明亮的教室，桌上有实验器材",
+    "cameraAngle": "侧面视角，突出互动",
+    "style": "水彩风格，色彩鲜艳",
+    "details": "桌上有烧杯、试管、护目镜",
+    "lighting": "明亮室内光",
+    "mood": "好奇、专注",
+    "technical": "高清，16:9比例",
+    "quality": "细节丰富，色彩饱满",
+    "negativePrompt": "不要出现危险、混乱场面"
+  },
+  "version": 1,
+  "createdAt": "2024-05-20T08:00:00.000Z",
+  "updatedAt": "2024-05-20T08:00:00.000Z",
+  "isActive": true
+} 

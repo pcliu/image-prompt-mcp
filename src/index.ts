@@ -1,66 +1,28 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { z } from "zod";
-import { config } from "dotenv";
+import { registerImageGenerationTool } from './tools/images.js';
 
-// Load environment variables
-config();
+async function main() {
+  try {
+    // 创建 MCP 服务器实例
+    const server = new McpServer({
+      name: "image-prompt-mcp",
+      version: "1.0.0",
+      description: "An MCP server for image prompt generation and management"
+    });
 
-// Create MCP server instance
-const server = new McpServer({
-  name: "image-prompt-mcp",
-  version: "1.0.0",
-  description: "An MCP server for image prompt generation and management"
-});
+    // 注册工具
+    registerImageGenerationTool(server);
 
-// Define image prompt generation tool
-server.tool(
-  "generate_image_prompt",
-  { 
-    description: z.string().describe("图像的主要描述"),
-    style: z.string().optional().describe("艺术风格（如：'realistic'、'anime'、'oil painting'）"),
-    mood: z.string().optional().describe("情绪氛围（如：'happy'、'mysterious'、'dramatic'）"),
-    format: z.string().optional().describe("图像格式或宽高比（如：'portrait'、'landscape'、'square'）")
-  },
-  async ({ description, style, mood, format }) => {
-    let prompt = description;
-    
-    if (style) {
-      prompt += `, ${style} style`;
-    }
-    
-    if (mood) {
-      prompt += `, ${mood} mood`;
-    }
-    
-    if (format) {
-      prompt += `, ${format} format`;
-    }
+    // 创建并连接 stdio 传输层
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
 
-    // Add some common quality enhancement words
-    prompt += ", high quality, detailed, 8k";
-
-    // Common negative prompt
-    const negativePrompt = "blurry, low quality, distorted, deformed";
-
-    return {
-      content: [{
-        type: "text",
-        text: prompt
-      }],
-      structuredContent: {
-        prompt,
-        negativePrompt
-      }
-    };
+    console.log('MCP 服务器已启动');
+  } catch (error) {
+    console.error('服务器启动失败:', error);
+    process.exit(1);
   }
-);
+}
 
-// Use stdio transport
-const transport = new StdioServerTransport();
-
-// Connect to the server
-server.connect(transport).catch((error: Error) => {
-  console.error("Failed to start MCP server:", error);
-  process.exit(1);
-}); 
+main(); 

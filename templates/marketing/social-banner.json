@@ -1,0 +1,23 @@
+{
+  "id": "b1e1a1c0-2001-4000-8000-000000000005",
+  "name": "社交媒体推广Banner",
+  "description": "适用于社交媒体广告的横幅图片，突出品牌和行动号召。",
+  "category": "marketing",
+  "parameters": {
+    "subject": "品牌Logo和促销口号",
+    "action": "展示限时优惠信息",
+    "environment": "渐变色背景，带有装饰元素",
+    "cameraAngle": "正面视角",
+    "style": "现代扁平化设计",
+    "details": "按钮、倒计时、品牌色块",
+    "lighting": "高对比度光效",
+    "mood": "活力、紧迫感",
+    "technical": "1200x628像素，适配Facebook",
+    "quality": "高清，色彩鲜明",
+    "negativePrompt": "不要出现低分辨率、杂乱元素"
+  },
+  "version": 1,
+  "createdAt": "2024-05-20T08:00:00.000Z",
+  "updatedAt": "2024-05-20T08:00:00.000Z",
+  "isActive": true
+} 

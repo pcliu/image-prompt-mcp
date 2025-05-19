@@ -8,6 +8,7 @@ description: 开发指南
 ---
 
 - 在开始每次新的任务时，需要查阅 [development-tasks.md](mdc:development-tasks.md) ;在完成任务后，需要更新 [development-tasks.md](mdc:development-tasks.md) 的进度； 如果方案调整，需要调整 [development-tasks.md](mdc:development-tasks.md) 的任务内容。
+- 按照 [PRD.mdc](mdc:.cursor/rules/PRD.mdc) 进行开发
 - 可以使用 MCP context7 工具来获取 MCP 最新的用法。
 - MCP的typescript-sdk地址: https://github.com/modelcontextprotocol/typescript-sdk
 

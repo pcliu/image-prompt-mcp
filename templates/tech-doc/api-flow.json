@@ -1,0 +1,23 @@
+{
+  "id": "b1e1a1c0-1001-4000-8000-000000000003",
+  "name": "API 流程图",
+  "description": "用于技术文档的 API 调用流程图，风格简洁、易读。",
+  "category": "tech-doc",
+  "parameters": {
+    "subject": "API 请求与响应流程",
+    "action": "展示数据流动方向",
+    "environment": "白色背景，带有箭头和节点",
+    "cameraAngle": "俯视视角",
+    "style": "扁平化线稿，蓝色主色调",
+    "details": "节点有图标，箭头清晰",
+    "lighting": "无特殊光效",
+    "mood": "专业、清晰",
+    "technical": "SVG 矢量，16:9比例",
+    "quality": "高对比度，易于阅读",
+    "negativePrompt": "不要出现多余装饰、手写字体"
+  },
+  "version": 1,
+  "createdAt": "2024-05-20T08:00:00.000Z",
+  "updatedAt": "2024-05-20T08:00:00.000Z",
+  "isActive": true
+} 
