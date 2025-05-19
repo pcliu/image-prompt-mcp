@@ -40,10 +40,6 @@
     - tech-doc/ - 技术文档模板
     - marketing/ - 营销内容模板
     - **已完成三大类典型预定义模板的设计与保存，内容覆盖所有主要参数，便于后续开发与测试。**
-  - 已创建 tests 目录（用于测试文件）
-    - tools/ - 工具测试
-    - sampling/ - Sampling 测试
-    - integration/ - 集成测试
 
 ### 2. 模板管理功能 [✅]
 - [✅] 实现模板数据结构 [src/models/template.ts](mdc:src/models/template.ts)
@@ -73,10 +69,6 @@
 - [✅] 实现 deleteTemplate
   - [✅] 实现模板删除功能
   - [✅] 添加错误处理
-- [✅] 编写单元测试
-  - [✅] 基本功能测试
-  - [✅] 参数验证测试
-  - [✅] 错误处理测试
 
 ### 3. 图片生成功能 [🔄]
 - [✅] 重构 generatePrompt 以支持模板 @src/tools/prompts.ts
@@ -91,10 +83,6 @@
   - [✅] Client capabilities 检查
   - [✅] Sampling 请求处理
   - [✅] 错误处理机制
-- [✅] 编写单元测试
-  - [✅] 基本功能测试
-  - [✅] Sampling 支持测试
-  - [✅] 错误场景测试
 - [ ] 手动验证
   - [ ] 支持 sampling 的场景测试
   - [ ] 不支持 sampling 的场景测试
@@ -105,14 +93,12 @@
 - [✅] 实现 handleSamplingRequest [src/sampling/handler.ts](mdc:src/sampling/handler.ts)
 - [✅] 实现 processSamplingResponse
 - [✅] 添加错误处理
-- [✅] 编写集成测试 [tests/integration/sampling.test.ts](mdc:tests/integration/sampling.test.ts)
 
 ### 5. 图片分析模板生成 [✅]
 - [✅] 实现 withSampling 模式 [src/tools/templates.ts](mdc:src/tools/templates.ts)
 - [✅] 实现 withoutSampling 模式
 - [✅] 添加客户端能力检测
 - [✅] 实现降级处理
-- [✅] 编写测试用例
 
 ## 优化任务
 
@@ -141,27 +127,6 @@
   - [ ] 优化响应时间
   - [ ] 减少资源占用
 
-## 测试计划
-
-### 单元测试 [🔄]
-- [✅] 工具函数测试
-  - [✅] generatePrompt 功能测试
-  - [✅] generateImage 工具测试
-- [✅] 参数验证测试
-- [✅] 错误处理测试
-
-### 集成测试 [🔄]
-- [✅] Sampling 功能测试
-- [✅] 完整工作流测试
-  - [✅] 模板创建与图片生成流程
-  - [✅] 模板更新与参数覆盖
-- [ ] 客户端兼容性测试
-
-### 模板测试 [🔲]
-- [ ] 格式验证测试
-- [ ] 默认值处理测试
-- [ ] 参数覆盖测试
-
 ## 发布检查清单
 
 ### 1. 代码质量 [🔲]
@@ -170,12 +135,7 @@
 - [ ] 代码注释完整性
 - [ ] 文档更新
 
-### 2. 测试覆盖 [🔲]
-- [ ] 单元测试覆盖率 > 80%
-- [ ] 集成测试通过
-- [ ] 性能测试达标
-
-### 3. 安全检查 [🔲]
+### 2. 安全检查 [🔲]
 - [ ] 输入验证完整性
 - [ ] 错误处理完整性
 - [ ] 敏感信息处理
@@ -203,8 +163,8 @@ interface ProgressUpdate {
 - 2024-05-16: 实现 Sampling 功能，包括 capabilities 检查和请求处理
 - 2024-05-17: 调整开发顺序，将模板管理功能提前，标记已实现的图片生成功能为需要重构
 - 2024-05-17: 完成 Sampling 集成的主要功能实现，包括 checkSamplingSupport、handleSamplingRequest 和 processSamplingResponse
-- 2024-05-17: 完成 Sampling 集成测试的编写和验证
 - 2024-05-27: 完成模板管理功能的所有工具实现，包括 listTemplates、getTemplate、createTemplate、createTemplateFromImage、updateTemplate 和 deleteTemplate
 - 2024-05-27: 实现模板管理功能的单元测试，包括基本功能测试、参数验证测试和错误处理测试
 - 2024-05-27: 修复模板管理功能的所有单元测试问题，更新开发任务进度
 - 2024-05-28: 完成图片分析模板生成功能，实现withSampling和withoutSampling两种模式，并添加相应的测试用例
+- 2024-07-18: 删除所有测试代码，简化项目结构

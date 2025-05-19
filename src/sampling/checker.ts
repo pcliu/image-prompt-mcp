@@ -22,15 +22,21 @@ export function checkSamplingSupport(
   extra: RequestHandlerExtra<ServerRequest, ServerNotification> & { _meta?: { capabilities?: ClientCapabilities } }
 ): boolean {
   // 检查客户端是否存在且有 capabilities
-  if (!extra._meta?.capabilities) {
+  if (!extra?._meta?.capabilities) {
     return false;
   }
 
   const { capabilities } = extra._meta;
+  
+  // 处理数组形式的 sampling 能力
+  if (Array.isArray(capabilities.sampling)) {
+    return capabilities.sampling.includes('createMessage');
+  }
+  
+  // 处理对象形式的 sampling 能力
   const sampling = capabilities.sampling as unknown as SamplingCapability | undefined;
 
   // 检查是否支持 sampling/createMessage
-  // 注意：根据 MCP 规范，sampling 功能主要通过 createMessage 方法实现
   return sampling?.includes('createMessage') ?? false;
 }
 
@@ -50,15 +56,24 @@ export interface SamplingCapabilities {
 export function checkDetailedSamplingCapabilities(
   extra: RequestHandlerExtra<ServerRequest, ServerNotification> & { _meta?: { capabilities?: ClientCapabilities } }
 ): SamplingCapabilities {
-  const capabilities = extra._meta?.capabilities;
-  
-  if (!capabilities) {
+  if (!extra?._meta?.capabilities) {
     return {
       supportsCreateMessage: false,
       supportsImages: false
     };
   }
 
+  const { capabilities } = extra._meta;
+  
+  // 处理数组形式的 sampling 能力
+  if (Array.isArray(capabilities.sampling)) {
+    return {
+      supportsCreateMessage: capabilities.sampling.includes('createMessage'),
+      supportsImages: capabilities.sampling.includes('image')
+    };
+  }
+  
+  // 处理对象形式的 sampling 能力
   const sampling = capabilities.sampling as unknown as SamplingCapability | undefined;
 
   return {
