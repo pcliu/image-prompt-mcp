@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { Template, TemplateSchema, TemplateParameters, validateTemplate } from '../models/template.js';
-import { checkSamplingSupport } from '../sampling/checker.js';
+import { Template, TemplateSchema, TemplateParameters, validateTemplate, TemplateCategory } from '../models/template.js';
+import { checkSamplingSupport, checkDetailedSamplingCapabilities } from '../sampling/checker.js';
 import { handleSamplingRequest, SamplingCreateMessageResponse, Message, MessageContent, SamplingServer } from '../sampling/handler.js';
 
 // 定义错误类型
@@ -495,194 +495,55 @@ export function registerTemplateTools(server: McpServer) {
   // 注册 createTemplateFromImage 工具
   server.tool(
     'createTemplateFromImage',
-    {
-      title: '从图片创建模板',
-      description: '通过分析图片来创建提示词模板',
-      parameters: CreateTemplateFromImageParams,
-    },
+    CreateTemplateFromImageParams,
     async (args: { [key: string]: any }, extra) => {
       try {
         // 检查客户端 sampling 支持
-        const supportsSampling = checkSamplingSupport(extra);
+        const capabilities = checkDetailedSamplingCapabilities(extra);
 
-        if (!supportsSampling) {
-          // 返回模板参数指南
+        // 如果支持 sampling 功能
+        if (capabilities.supportsCreateMessage && capabilities.supportsImages) {
+          // 使用支持 sampling 的方式生成模板
+          const { template, analysis } = await createTemplateFromImageWithSampling(
+            server as unknown as SamplingServer,
+            args as { imageUrl: string, name?: string, description?: string, category?: TemplateCategory }
+          );
+
+          // 返回结果
           return {
             content: [
               {
-                type: 'text',
-                text: '客户端不支持图片分析功能，请参考以下指南手动创建模板：',
+                type: 'text' as const,
+                text: `成功从图片创建模板: ${template.name}`,
               },
               {
-                type: 'text',
-                text: `
-参数填写指南：
-
-1. 基本信息
-- name: 模板名称（1-100字符）
-- description: 模板描述（最多500字符）
-- category: 模板分类（children-book/tech-doc/marketing）
-
-2. 图片参数
-- subject: 主体内容 - 明确"画什么"（必填）
-- action: 动作/姿态 - 如果主体在做事或有特定姿势
-- environment: 场景与背景 - 交代地点、时代、天气、室内外等
-- cameraAngle: 视角与构图 - 决定"从哪看"与"怎么排版"
-- style: 风格与媒介 - 让模型模仿特定艺术语言
-- details: 细节与材质 - 增加纹理和真实感
-- lighting: 灯光与色调 - 左右画面氛围
-- mood: 情绪/主题氛围 - 传达整体情感
-- technical: 相机或画面参数 - 控制分辨率、镜头、比例
-- quality: 质量与排行榜关键词 - 暗示"高水准"
-- negativePrompt: 负面提示 - 明确"不要什么"
-
-建议：
-1. 仔细观察图片的各个方面
-2. 从主体内容开始，逐步添加细节
-3. 注意记录图片的风格和氛围
-4. 可以使用客户端的 AI 能力辅助分析图片
-
-完成参数填写后，请使用 createTemplate 工具创建模板。`,
+                type: 'text' as const,
+                text: '图片分析结果：\n' + analysis,
               },
             ],
             structuredContent: {
-              error: 'SAMPLING_NOT_SUPPORTED',
-              parameterGuide: {
-                required: ['subject'],
-                optional: [
-                  'action',
-                  'environment',
-                  'cameraAngle',
-                  'style',
-                  'details',
-                  'lighting',
-                  'mood',
-                  'technical',
-                  'quality',
-                  'negativePrompt',
-                ],
-                descriptions: {
-                  subject: '主体内容 - 明确"画什么"',
-                  action: '动作/姿态 - 如果主体在做事或有特定姿势',
-                  environment: '场景与背景 - 交代地点、时代、天气、室内外等',
-                  cameraAngle: '视角与构图 - 决定"从哪看"与"怎么排版"',
-                  style: '风格与媒介 - 让模型模仿特定艺术语言',
-                  details: '细节与材质 - 增加纹理和真实感',
-                  lighting: '灯光与色调 - 左右画面氛围',
-                  mood: '情绪/主题氛围 - 传达整体情感',
-                  technical: '相机或画面参数 - 控制分辨率、镜头、比例',
-                  quality: '质量与排行榜关键词 - 暗示"高水准"',
-                  negativePrompt: '负面提示 - 明确"不要什么"',
-                },
+              template: {
+                id: template.id,
+                name: template.name,
+                description: template.description,
+                category: template.category,
+                version: template.version,
+                createdAt: template.createdAt,
+                parameters: template.parameters,
+                analysis: analysis,
               },
             },
           };
+        } else {
+          // 使用不支持 sampling 的降级处理
+          return createTemplateFromImageWithoutSampling();
         }
-
-        // 发起图片分析请求
-        const analysisResult = await handleSamplingRequest(server as unknown as SamplingServer, {
-          messages: [
-            {
-              role: 'user',
-              content: {
-                type: 'text',
-                text: `你是一个专业的图片分析助手。请分析给定的图片，提取以下信息：
-
-1. 主体内容：图片中的主要对象或主题是什么
-2. 动作/姿态：主体在做什么，有什么特定的姿势
-3. 场景与背景：在什么环境中，包括地点、时代、天气等
-4. 视角与构图：从什么角度拍摄，如何排版
-5. 风格与媒介：使用了什么艺术风格或表现手法
-6. 细节与材质：有什么特殊的纹理或材质表现
-7. 灯光与色调：光线效果和整体色彩风格
-8. 情绪/主题氛围：传达了什么样的情感或氛围
-9. 相机或画面参数：分辨率、比例等技术细节
-10. 质量提升关键词：能提升生成质量的关键特征
-11. 需要避免的元素：不希望出现的内容或效果
-
-请以结构化的方式返回分析结果，确保每个类别都有明确的描述。如果某个类别没有明显特征，请填写"无"。`
-              }
-            },
-            {
-              role: 'user',
-              content: {
-                type: 'text',
-                text: `请分析这张图片，提取用于生成类似图片的关键特征。`
-              }
-            },
-            {
-              role: 'user',
-              content: {
-                type: 'image',
-                data: args.imageUrl,
-                mimeType: 'image/png'
-              }
-            },
-          ],
-          temperature: 0.7,
-          maxTokens: 1000,
-        }) as SamplingCreateMessageResponse;
-
-        if (!analysisResult?.content?.text) {
-          throw new Error('图片分析失败：未收到有效的分析结果');
-        }
-
-        // 解析分析结果
-        const templateParams = parseAnalysisToTemplateParams(analysisResult.content.text);
-
-        // 创建新模板
-        const newTemplate: Template = {
-          id: crypto.randomUUID(),
-          name: args.name || '从图片创建的模板',
-          description: args.description || `基于图片分析创建的模板 - ${new Date().toISOString()}`,
-          category: args.category as Template['category'] || 'tech-doc',
-          parameters: templateParams as TemplateParameters,
-          version: 1,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          isActive: true,
-        };
-
-        // 验证新模板
-        try {
-          validateTemplate(newTemplate);
-        } catch (validationError) {
-          throw new TemplateError(
-            TemplateErrorType.INVALID_PARAMETERS,
-            '生成的模板参数无效',
-            validationError
-          );
-        }
-
-        // 添加到存储
-        templates.push(newTemplate);
-
-        // 返回结果
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `成功从图片创建模板: ${newTemplate.name}`,
-            },
-            {
-              type: 'text',
-              text: '图片分析结果：\n' + analysisResult.content.text,
-            },
-          ],
-          structuredContent: {
-            template: {
-              id: newTemplate.id,
-              name: newTemplate.name,
-              description: newTemplate.description,
-              category: newTemplate.category,
-              version: newTemplate.version,
-              createdAt: newTemplate.createdAt,
-              parameters: newTemplate.parameters,
-              analysis: analysisResult.content.text,
-            },
-          },
-        };
       } catch (error) {
+        // 捕获和处理错误
+        if (error instanceof TemplateError) {
+          throw error;
+        }
+        
         throw new TemplateError(
           TemplateErrorType.INTERNAL_ERROR,
           '从图片创建模板失败',
@@ -870,4 +731,157 @@ export function registerTemplateTools(server: McpServer) {
       }
     }
   );
+}
+
+/**
+ * 使用Sampling功能从图片生成模板
+ * 适用于支持sampling/createMessage的客户端
+ * 
+ * @param server 支持Sampling的服务器实例
+ * @param args 客户端参数
+ * @returns 生成的模板和分析结果
+ */
+export async function createTemplateFromImageWithSampling(
+  server: SamplingServer,
+  args: { imageUrl: string, name?: string, description?: string, category?: TemplateCategory }
+): Promise<{ template: Template, analysis: string }> {
+  // 发起图片分析请求
+  const analysisResult = await handleSamplingRequest(server, {
+    messages: [
+      {
+        role: 'user',
+        content: {
+          type: 'text',
+          text: `你是一个专业的图片分析助手。请分析给定的图片，提取以下信息：
+
+1. 主体内容：图片中的主要对象或主题是什么
+2. 动作/姿态：主体在做什么，有什么特定的姿势
+3. 场景与背景：在什么环境中，包括地点、时代、天气等
+4. 视角与构图：从什么角度拍摄，如何排版
+5. 风格与媒介：使用了什么艺术风格或表现手法
+6. 细节与材质：有什么特殊的纹理或材质表现
+7. 灯光与色调：光线效果和整体色彩风格
+8. 情绪/主题氛围：传达了什么样的情感或氛围
+9. 相机或画面参数：分辨率、比例等技术细节
+10. 质量提升关键词：能提升生成质量的关键特征
+11. 需要避免的元素：不希望出现的内容或效果
+
+请以结构化的方式返回分析结果，确保每个类别都有明确的描述。如果某个类别没有明显特征，请填写"无"。`
+        }
+      },
+      {
+        role: 'user',
+        content: {
+          type: 'text',
+          text: `请分析这张图片，提取用于生成类似图片的关键特征。`
+        }
+      },
+      {
+        role: 'user',
+        content: {
+          type: 'image',
+          data: args.imageUrl,
+          mimeType: 'image/png'
+        }
+      },
+    ],
+    temperature: 0.7,
+    maxTokens: 1000,
+  }) as SamplingCreateMessageResponse;
+
+  if (!analysisResult?.content?.text) {
+    throw new Error('图片分析失败：未收到有效的分析结果');
+  }
+
+  // 解析分析结果
+  const templateParams = parseAnalysisToTemplateParams(analysisResult.content.text);
+
+  // 创建新模板
+  const newTemplate: Template = {
+    id: crypto.randomUUID(),
+    name: args.name || '从图片创建的模板',
+    description: args.description || `基于图片分析创建的模板 - ${new Date().toISOString()}`,
+    category: args.category as Template['category'] || 'tech-doc',
+    parameters: templateParams as TemplateParameters,
+    version: 1,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    isActive: true,
+  };
+
+  // 验证新模板
+  validateTemplate(newTemplate);
+
+  // 添加到存储
+  templates.push(newTemplate);
+
+  return {
+    template: newTemplate,
+    analysis: analysisResult.content.text
+  };
+}
+
+/**
+ * 不使用Sampling功能的模板创建指南
+ * 适用于不支持sampling/createMessage的客户端
+ * 
+ * @returns 模板参数指南和结构化错误信息
+ */
+export function createTemplateFromImageWithoutSampling() {
+  // 返回模板参数指南和示例
+  return {
+    content: [
+      {
+        type: 'text' as const,
+        text: '客户端不支持图片分析功能，请参考以下指南手动创建模板：',
+      },
+      {
+        type: 'text' as const,
+        text: `
+参数填写指南：
+
+1. 基本信息
+- name: 模板名称（1-100字符）
+- description: 模板描述（最多500字符）
+- category: 模板分类（children-book/tech-doc/marketing）
+
+2. 图片参数
+- subject: 主体内容 - 明确"画什么"（必填）
+- action: 动作/姿态 - 如果主体在做事或有特定姿势
+- environment: 场景与背景 - 交代地点、时代、天气、室内外等
+- cameraAngle: 视角与构图 - 决定"从哪看"与"怎么排版"
+- style: 风格与媒介 - 让模型模仿特定艺术语言
+- details: 细节与材质 - 增加纹理和真实感
+- lighting: 灯光与色调 - 左右画面氛围
+- mood: 情绪/主题氛围 - 传达整体情感
+- technical: 相机或画面参数 - 控制分辨率、镜头、比例
+- quality: 质量与排行榜关键词 - 暗示"高水准"
+- negativePrompt: 负面提示 - 明确"不要什么"
+
+建议：
+1. 仔细观察图片的各个方面
+2. 从主体内容开始，逐步添加细节
+3. 注意记录图片的风格和氛围
+4. 可以使用客户端的 AI 能力辅助分析图片
+
+完成参数填写后，请使用 createTemplate 工具创建模板。`,
+      },
+    ],
+    structuredContent: {
+      error: 'SAMPLING_NOT_SUPPORTED',
+      message: '客户端不支持图片分析功能，请参考指南手动创建模板',
+      template: {
+        example: {
+          name: '示例模板',
+          description: '手动创建的模板示例',
+          category: 'tech-doc',
+          parameters: {
+            subject: '您的主体内容',
+            style: '您期望的风格',
+            environment: '场景描述',
+          }
+        }
+      }
+    }
+  };
 }

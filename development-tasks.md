@@ -107,12 +107,12 @@
 - [✅] 添加错误处理
 - [✅] 编写集成测试 [tests/integration/sampling.test.ts](mdc:tests/integration/sampling.test.ts)
 
-### 5. 图片分析模板生成 [🔲]
-- [ ] 实现 withSampling 模式 [src/tools/templates.ts](mdc:src/tools/templates.ts)
-- [ ] 实现 withoutSampling 模式
-- [ ] 添加客户端能力检测
-- [ ] 实现降级处理
-- [ ] 编写测试用例
+### 5. 图片分析模板生成 [✅]
+- [✅] 实现 withSampling 模式 [src/tools/templates.ts](mdc:src/tools/templates.ts)
+- [✅] 实现 withoutSampling 模式
+- [✅] 添加客户端能力检测
+- [✅] 实现降级处理
+- [✅] 编写测试用例
 
 ## 优化任务
 
@@ -207,3 +207,4 @@ interface ProgressUpdate {
 - 2024-05-27: 完成模板管理功能的所有工具实现，包括 listTemplates、getTemplate、createTemplate、createTemplateFromImage、updateTemplate 和 deleteTemplate
 - 2024-05-27: 实现模板管理功能的单元测试，包括基本功能测试、参数验证测试和错误处理测试
 - 2024-05-27: 修复模板管理功能的所有单元测试问题，更新开发任务进度
+- 2024-05-28: 完成图片分析模板生成功能，实现withSampling和withoutSampling两种模式，并添加相应的测试用例
