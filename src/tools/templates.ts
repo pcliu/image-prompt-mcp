@@ -3,6 +3,8 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { Template, TemplateSchema, TemplateParameters, validateTemplate, TemplateCategory } from '../models/template.js';
 import { checkSamplingSupport, checkDetailedSamplingCapabilities } from '../sampling/checker.js';
 import { handleSamplingRequest, SamplingCreateMessageResponse, Message, MessageContent, SamplingServer } from '../sampling/handler.js';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 
 // 定义错误类型
 export enum TemplateErrorType {
@@ -22,12 +24,6 @@ export class TemplateError extends Error {
   }
 }
 
-// 定义分页参数
-const PaginationParams = {
-  page: z.number().int().min(1).optional().default(1),
-  pageSize: z.number().int().min(1).max(100).optional().default(10),
-};
-
 // 定义排序参数
 const SortParams = {
   sortBy: z.enum(['name', 'createdAt', 'updatedAt']).optional().default('createdAt'),
@@ -43,14 +39,11 @@ const FilterParams = {
 
 // 组合所有参数
 const ListTemplatesParams = {
-  ...PaginationParams,
   ...SortParams,
   ...FilterParams,
 };
 
 type ListTemplatesParamsType = {
-  page: number;
-  pageSize: number;
   sortBy: 'name' | 'createdAt' | 'updatedAt';
   sortOrder: 'asc' | 'desc';
   category?: string;
@@ -196,8 +189,117 @@ const CreateTemplateFromImageParams = {
   },
 };
 
-// 模拟数据存储
+// 定义模板目录
+const TEMPLATES_DIR = path.join(process.cwd(), 'templates');
+
+// 从文件系统加载模板
+async function loadTemplatesFromFS(): Promise<Template[]> {
+  const loadedTemplates: Template[] = [];
+  console.log('开始加载模板...');
+  
+  try {
+    console.log(`正在从目录加载模板: ${TEMPLATES_DIR}`);
+    // 读取所有类别目录
+    const categories = await fs.readdir(TEMPLATES_DIR);
+    console.log(`发现 ${categories.length} 个分类目录:`, categories);
+    
+    for (const category of categories) {
+      const categoryPath = path.join(TEMPLATES_DIR, category);
+      const stat = await fs.stat(categoryPath);
+      
+      if (stat.isDirectory()) {
+        console.log(`\n处理分类目录: ${category}`);
+        // 读取该类别下的所有模板文件
+        const files = await fs.readdir(categoryPath);
+        console.log(`发现 ${files.length} 个文件:`, files);
+        
+        for (const file of files) {
+          if (file.endsWith('.json')) {
+            try {
+              const filePath = path.join(categoryPath, file);
+              console.log(`\n正在加载模板文件: ${filePath}`);
+              const content = await fs.readFile(filePath, 'utf-8');
+              const templateData = JSON.parse(content);
+              
+              // 添加基本信息
+              templateData.id = templateData.id || crypto.randomUUID();
+              templateData.category = category as TemplateCategory;
+              templateData.version = templateData.version || 1;
+              templateData.createdAt = new Date(templateData.createdAt || Date.now());
+              templateData.updatedAt = new Date(templateData.updatedAt || Date.now());
+              templateData.isActive = templateData.isActive ?? true;
+              
+              console.log('正在验证模板:', {
+                id: templateData.id,
+                name: templateData.name,
+                category: templateData.category
+              });
+              
+              // 验证模板
+              validateTemplate(templateData);
+              
+              loadedTemplates.push(templateData as Template);
+              console.log('模板加载成功 ✅');
+            } catch (error) {
+              console.error(`加载模板文件失败 ${file}:`, error);
+              if (error instanceof Error) {
+                console.error('错误详情:', error.message);
+                if (error.stack) {
+                  console.error('错误堆栈:', error.stack);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('加载模板目录失败:', error);
+    if (error instanceof Error) {
+      console.error('错误详情:', error.message);
+      if (error.stack) {
+        console.error('错误堆栈:', error.stack);
+      }
+    }
+  }
+  
+  console.log(`\n模板加载完成，共加载 ${loadedTemplates.length} 个模板`);
+  if (loadedTemplates.length > 0) {
+    console.log('已加载的模板列表:');
+    loadedTemplates.forEach((template, index) => {
+      console.log(`${index + 1}. ${template.name} (${template.category})`);
+    });
+  } else {
+    console.warn('警告：没有加载到任何模板！');
+  }
+  
+  return loadedTemplates;
+}
+
+// 初始化模板存储
 let templates: Template[] = [];
+
+// 加载模板函数
+export async function initializeTemplates() {
+  console.log('\n=== 开始初始化模板系统 ===');
+  console.log('当前工作目录:', process.cwd());
+  console.log('模板目录:', TEMPLATES_DIR);
+  
+  try {
+    templates = await loadTemplatesFromFS();
+    console.log(`=== 模板系统初始化完成，共加载 ${templates.length} 个模板 ===\n`);
+  } catch (error) {
+    console.error('模板系统初始化失败:', error);
+    if (error instanceof Error) {
+      console.error('错误详情:', error.message);
+      if (error.stack) {
+        console.error('错误堆栈:', error.stack);
+      }
+    }
+    // 重新抛出错误，让上层处理
+    throw error;
+  }
+}
 
 /**
  * 解析图片分析结果为模板参数
@@ -278,247 +380,427 @@ export function getTemplateById(id: string, version?: number): Template {
  * 注册模板管理工具到 MCP 服务器
  * @param server MCP 服务器实例
  */
-export function registerTemplateTools(server: McpServer) {
-  // 注册 listTemplates 工具
-  server.tool(
-    'listTemplates',
-    ListTemplatesParams,
-    async (params: ListTemplatesParamsType) => {
-      try {
-        // 应用过滤
-        let filteredTemplates = templates.filter(template => {
-          if (params.isActive !== undefined && template.isActive !== params.isActive) {
-            return false;
+export async function registerTemplateTools(server: McpServer) {
+  console.log('\n=== 开始注册模板工具 ===');
+  
+  try {
+    // 初始化模板
+    await initializeTemplates();
+    
+    console.log('正在注册 listTemplates 工具...');
+    // 注册 listTemplates 工具
+    server.tool(
+      'listTemplates',
+      {
+        title: '列出模板',
+        description: '列出所有可用的提示词模板',
+        inputSchema: {
+          sortBy: z.enum(['name', 'createdAt', 'updatedAt']).optional().default('createdAt').describe('排序字段'),
+          sortOrder: z.enum(['asc', 'desc']).optional().default('desc').describe('排序顺序'),
+          category: z.string().optional().describe('模板分类'),
+          search: z.string().optional().describe('搜索关键词'),
+          isActive: z.boolean().optional().default(true).describe('是否激活'),
+        },
+        annotations: {
+          readOnlyHint: true,
+          openWorldHint: false,
+          idempotentHint: true,
+        },
+        outputSchema: {
+          content: z.array(
+            z.object({ type: z.literal('text'), text: z.string() })
+          ),
+        },
+      },
+      async (args: { [key: string]: any }, extra) => {
+        try {
+          const params: ListTemplatesParamsType = args as ListTemplatesParamsType;
+          
+          // 应用过滤
+          let filteredTemplates = templates.filter(template => {
+            if (params.isActive !== undefined && template.isActive !== params.isActive) {
+              return false;
+            }
+            if (params.category && template.category !== params.category) {
+              return false;
+            }
+            if (params.search) {
+              const searchLower = params.search.toLowerCase();
+              return (
+                template.name.toLowerCase().includes(searchLower) ||
+                template.description.toLowerCase().includes(searchLower)
+              );
+            }
+            return true;
+          });
+
+          // 应用排序
+          filteredTemplates.sort((a, b) => {
+            const sortBy = params.sortBy;
+            const sortOrder = params.sortOrder === 'asc' ? 1 : -1;
+
+            if (sortBy === 'name') {
+              return sortOrder * a.name.localeCompare(b.name);
+            }
+            if (sortBy === 'createdAt') {
+              return sortOrder * (a.createdAt.getTime() - b.createdAt.getTime());
+            }
+            if (sortBy === 'updatedAt') {
+              return sortOrder * (a.updatedAt.getTime() - b.updatedAt.getTime());
+            }
+            return 0;
+          });
+
+          // 构建文本输出（无分页）
+          let output = `找到 ${filteredTemplates.length} 个模板\n\n`;
+
+          if (filteredTemplates.length === 0) {
+            output += '没有找到匹配的模板。';
+          } else {
+            filteredTemplates.forEach((template, index) => {
+              output += `${index + 1}. ${template.name}\n`;
+              output += `   ID: ${template.id}\n`;
+              output += `   分类: ${template.category}\n`;
+              output += `   描述: ${template.description}\n`;
+              output += `   版本: ${template.version}\n`;
+              output += `   创建时间: ${template.createdAt.toLocaleString()}\n`;
+              output += `   更新时间: ${template.updatedAt.toLocaleString()}\n\n`;
+            });
           }
-          if (params.category && template.category !== params.category) {
-            return false;
+
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: output
+              }
+            ]
+          };
+        } catch (error) {
+          // 根据 MCP 规范处理错误
+          if (error instanceof z.ZodError) {
+            return {
+              isError: true,
+              content: [
+                {
+                  type: 'text' as const,
+                  text: `参数验证失败: ${error.message}`
+                }
+              ]
+            };
           }
-          if (params.search) {
-            const searchLower = params.search.toLowerCase();
-            return (
-              template.name.toLowerCase().includes(searchLower) ||
-              template.description.toLowerCase().includes(searchLower)
+          return {
+            isError: true,
+            content: [
+              {
+                type: 'text' as const,
+                text: `获取模板列表失败: ${error instanceof Error ? error.message : '未知错误'}`
+              }
+            ]
+          };
+        }
+      }
+    );
+    
+    console.log('正在注册 getTemplate 工具...');
+    // 注册 getTemplate 工具
+    server.tool(
+      'getTemplate',
+      GetTemplateParams,
+      async (params: GetTemplateParamsType) => {
+        try {
+          // 查找模板
+          const template = templates.find(t => t.id === params.id);
+          
+          if (!template) {
+            throw new TemplateError(
+              TemplateErrorType.TEMPLATE_NOT_FOUND,
+              `模板 ${params.id} 不存在`
             );
           }
-          return true;
-        });
 
-        // 应用排序
-        filteredTemplates.sort((a, b) => {
-          const sortBy = params.sortBy;
-          const sortOrder = params.sortOrder === 'asc' ? 1 : -1;
-
-          if (sortBy === 'name') {
-            return sortOrder * a.name.localeCompare(b.name);
+          // 如果指定了版本，检查版本是否匹配
+          if (params.version && template.version !== params.version) {
+            throw new TemplateError(
+              TemplateErrorType.TEMPLATE_NOT_FOUND,
+              `模板 ${params.id} 的版本 ${params.version} 不存在`
+            );
           }
-          if (sortBy === 'createdAt') {
-            return sortOrder * (a.createdAt.getTime() - b.createdAt.getTime());
-          }
-          if (sortBy === 'updatedAt') {
-            return sortOrder * (a.updatedAt.getTime() - b.updatedAt.getTime());
-          }
-          return 0;
-        });
-
-        // 应用分页
-        const startIndex = (params.page - 1) * params.pageSize;
-        const endIndex = startIndex + params.pageSize;
-        const paginatedTemplates = filteredTemplates.slice(startIndex, endIndex);
-
-        // 返回结果
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `找到 ${filteredTemplates.length} 个模板`,
-            },
-          ],
-          structuredContent: {
-            templates: paginatedTemplates.map(template => ({
-              id: template.id,
-              name: template.name,
-              description: template.description,
-              category: template.category,
-              version: template.version,
-              createdAt: template.createdAt,
-              updatedAt: template.updatedAt,
-            })),
-            pagination: {
-              total: filteredTemplates.length,
-              page: params.page,
-              pageSize: params.pageSize,
-              totalPages: Math.ceil(filteredTemplates.length / params.pageSize),
-            },
-          },
-        };
-      } catch (error) {
-        if (error instanceof z.ZodError) {
-          throw new TemplateError(
-            TemplateErrorType.INVALID_PARAMETERS,
-            '参数验证失败',
-            error
-          );
-        }
-        throw new TemplateError(
-          TemplateErrorType.INTERNAL_ERROR,
-          '获取模板列表失败',
-          error
-        );
-      }
-    }
-  );
-
-  // 注册 getTemplate 工具
-  server.tool(
-    'getTemplate',
-    GetTemplateParams,
-    async (params: GetTemplateParamsType) => {
-      try {
-        // 查找模板
-        const template = templates.find(t => t.id === params.id);
-        
-        if (!template) {
-          throw new TemplateError(
-            TemplateErrorType.TEMPLATE_NOT_FOUND,
-            `模板 ${params.id} 不存在`
-          );
-        }
-
-        // 如果指定了版本，检查版本是否匹配
-        if (params.version && template.version !== params.version) {
-          throw new TemplateError(
-            TemplateErrorType.TEMPLATE_NOT_FOUND,
-            `模板 ${params.id} 的版本 ${params.version} 不存在`
-          );
-        }
-
-        // 返回结果
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `找到模板: ${template.name}`,
-            },
-          ],
-          structuredContent: {
-            template: {
-              ...template,
-              parameters: {
-                ...template.parameters,
-                // 添加每个参数的描述信息
-                _descriptions: {
-                  subject: '主体内容 - 明确"画什么"',
-                  action: '动作/姿态 - 如果主体在做事或有特定姿势',
-                  environment: '场景与背景 - 交代地点、时代、天气、室内外等',
-                  cameraAngle: '视角与构图 - 决定"从哪看"与"怎么排版"',
-                  style: '风格与媒介 - 让模型模仿特定艺术语言',
-                  details: '细节与材质 - 增加纹理和真实感',
-                  lighting: '灯光与色调 - 左右画面氛围',
-                  mood: '情绪/主题氛围 - 传达整体情感',
-                  technical: '相机或画面参数 - 控制分辨率、镜头、比例',
-                  quality: '质量与排行榜关键词 - 暗示"高水准"',
-                  negativePrompt: '负面提示 - 明确"不要什么"',
-                },
-              },
-            },
-          },
-        };
-      } catch (error) {
-        if (error instanceof TemplateError) {
-          throw error;
-        }
-        throw new TemplateError(
-          TemplateErrorType.INTERNAL_ERROR,
-          '获取模板详情失败',
-          error
-        );
-      }
-    }
-  );
-
-  // 注册 createTemplate 工具
-  server.tool(
-    'createTemplate',
-    {
-      title: '创建模板',
-      description: '创建一个新的提示词模板',
-      parameters: CreateTemplateParams,
-    },
-    async (args: { [key: string]: any }, extra) => {
-      try {
-        // 创建新模板
-        const newTemplate: Template = {
-          id: crypto.randomUUID(),
-          name: args.name,
-          description: args.description,
-          category: args.category as Template['category'],
-          parameters: args.parameters,
-          version: 1,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          isActive: true,
-        };
-
-        // 添加到存储
-        templates.push(newTemplate);
-
-        // 返回结果
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `成功创建模板: ${newTemplate.name}`,
-            },
-          ],
-          structuredContent: {
-            template: {
-              id: newTemplate.id,
-              name: newTemplate.name,
-              description: newTemplate.description,
-              category: newTemplate.category,
-              version: newTemplate.version,
-              createdAt: newTemplate.createdAt,
-              parameters: newTemplate.parameters,
-            },
-          },
-        };
-      } catch (error) {
-        throw new TemplateError(
-          TemplateErrorType.INTERNAL_ERROR,
-          '创建模板失败',
-          error
-        );
-      }
-    }
-  );
-
-  // 注册 createTemplateFromImage 工具
-  server.tool(
-    'createTemplateFromImage',
-    CreateTemplateFromImageParams,
-    async (args: { [key: string]: any }, extra) => {
-      try {
-        // 检查客户端 sampling 支持
-        const capabilities = checkDetailedSamplingCapabilities(extra);
-
-        // 如果支持 sampling 功能
-        if (capabilities.supportsCreateMessage && capabilities.supportsImages) {
-          // 使用支持 sampling 的方式生成模板
-          const { template, analysis } = await createTemplateFromImageWithSampling(
-            server as unknown as SamplingServer,
-            args as { imageUrl: string, name?: string, description?: string, category?: TemplateCategory }
-          );
 
           // 返回结果
           return {
             content: [
               {
-                type: 'text' as const,
-                text: `成功从图片创建模板: ${template.name}`,
+                type: 'text',
+                text: `找到模板: ${template.name}`,
               },
+            ],
+            structuredContent: {
+              template: {
+                ...template,
+                parameters: {
+                  ...template.parameters,
+                  // 添加每个参数的描述信息
+                  _descriptions: {
+                    subject: '主体内容 - 明确"画什么"',
+                    action: '动作/姿态 - 如果主体在做事或有特定姿势',
+                    environment: '场景与背景 - 交代地点、时代、天气、室内外等',
+                    cameraAngle: '视角与构图 - 决定"从哪看"与"怎么排版"',
+                    style: '风格与媒介 - 让模型模仿特定艺术语言',
+                    details: '细节与材质 - 增加纹理和真实感',
+                    lighting: '灯光与色调 - 左右画面氛围',
+                    mood: '情绪/主题氛围 - 传达整体情感',
+                    technical: '相机或画面参数 - 控制分辨率、镜头、比例',
+                    quality: '质量与排行榜关键词 - 暗示"高水准"',
+                    negativePrompt: '负面提示 - 明确"不要什么"',
+                  },
+                },
+              },
+            },
+          };
+        } catch (error) {
+          if (error instanceof TemplateError) {
+            throw error;
+          }
+          throw new TemplateError(
+            TemplateErrorType.INTERNAL_ERROR,
+            '获取模板详情失败',
+            error
+          );
+        }
+      }
+    );
+    
+    console.log('正在注册 createTemplate 工具...');
+    // 注册 createTemplate 工具
+    server.tool(
+      'createTemplate',
+      {
+        title: '创建模板',
+        description: '创建一个新的提示词模板',
+        parameters: CreateTemplateParams,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: false,
+        },
+      },
+      async (args: { [key: string]: any }, extra) => {
+        try {
+          // 创建新模板
+          const newTemplate: Template = {
+            id: crypto.randomUUID(),
+            name: args.name,
+            description: args.description,
+            category: args.category as Template['category'],
+            parameters: args.parameters,
+            version: 1,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            isActive: true,
+          };
+
+          // 验证新模板
+          validateTemplate(newTemplate);
+
+          // 保存到文件系统
+          await saveTemplateToFS(newTemplate);
+
+          // 添加到内存存储
+          templates.push(newTemplate);
+
+          return {
+            content: [
               {
                 type: 'text' as const,
-                text: '图片分析结果：\n' + analysis,
+                text: `成功创建模板: ${newTemplate.name}`,
+              },
+            ],
+            structuredContent: {
+              template: {
+                id: newTemplate.id,
+                name: newTemplate.name,
+                description: newTemplate.description,
+                category: newTemplate.category,
+                version: newTemplate.version,
+                createdAt: newTemplate.createdAt,
+                parameters: newTemplate.parameters,
+              },
+            },
+          };
+        } catch (error) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: 'text' as const,
+                text: `创建模板失败: ${error instanceof Error ? error.message : '未知错误'}`,
+              },
+            ],
+          };
+        }
+      }
+    );
+    
+    console.log('正在注册 createTemplateFromImage 工具...');
+    // 注册 createTemplateFromImage 工具
+    server.tool(
+      'createTemplateFromImage',
+      CreateTemplateFromImageParams,
+      async (args: { [key: string]: any }, extra) => {
+        try {
+          // 检查客户端 sampling 支持
+          const capabilities = checkDetailedSamplingCapabilities(extra);
+
+          // 如果支持 sampling 功能
+          if (capabilities.supportsCreateMessage && capabilities.supportsImages) {
+            // 使用支持 sampling 的方式生成模板
+            const { template, analysis } = await createTemplateFromImageWithSampling(
+              server as unknown as SamplingServer,
+              args as { imageUrl: string, name?: string, description?: string, category?: TemplateCategory }
+            );
+
+            // 返回结果
+            return {
+              content: [
+                {
+                  type: 'text' as const,
+                  text: `成功从图片创建模板: ${template.name}`,
+                },
+                {
+                  type: 'text' as const,
+                  text: '图片分析结果：\n' + analysis,
+                },
+              ],
+              structuredContent: {
+                template: {
+                  id: template.id,
+                  name: template.name,
+                  description: template.description,
+                  category: template.category,
+                  version: template.version,
+                  createdAt: template.createdAt,
+                  parameters: template.parameters,
+                  analysis: analysis,
+                },
+              },
+            };
+          } else {
+            // 使用不支持 sampling 的降级处理
+            return createTemplateFromImageWithoutSampling();
+          }
+        } catch (error) {
+          // 捕获和处理错误
+          if (error instanceof TemplateError) {
+            throw error;
+          }
+          
+          throw new TemplateError(
+            TemplateErrorType.INTERNAL_ERROR,
+            '从图片创建模板失败',
+            error
+          );
+        }
+      }
+    );
+    
+    console.log('正在注册 updateTemplate 工具...');
+    // 注册 updateTemplate 工具
+    server.tool(
+      'updateTemplate',
+      {
+        title: '更新模板',
+        description: '更新现有的提示词模板',
+        parameters: {
+          id: {
+            type: 'string',
+            description: '模板ID',
+          },
+          name: {
+            type: 'string',
+            description: '模板名称',
+            minLength: 1,
+            maxLength: 100,
+            optional: true,
+          },
+          description: {
+            type: 'string',
+            description: '模板描述',
+            maxLength: 500,
+            optional: true,
+          },
+          category: {
+            type: 'string',
+            description: '模板分类',
+            enum: ['children-book', 'tech-doc', 'marketing'],
+            optional: true,
+          },
+          parameters: {
+            type: 'object',
+            description: '模板参数',
+            optional: true,
+          },
+          isActive: {
+            type: 'boolean',
+            description: '是否激活',
+            optional: true,
+          },
+        },
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+      },
+      async (args: { [key: string]: any }) => {
+        try {
+          // 查找模板
+          const templateIndex = templates.findIndex(t => t.id === args.id);
+          
+          if (templateIndex === -1) {
+            return {
+              isError: true,
+              content: [
+                {
+                  type: 'text' as const,
+                  text: `模板 ${args.id} 不存在`,
+                },
+              ],
+            };
+          }
+
+          const template = templates[templateIndex];
+          
+          // 更新模板字段
+          if (args.name !== undefined) template.name = args.name;
+          if (args.description !== undefined) template.description = args.description;
+          if (args.category !== undefined) template.category = args.category as Template['category'];
+          if (args.parameters !== undefined) {
+            // 确保保留必要的 subject 字段
+            if (!args.parameters.subject && template.parameters.subject) {
+              args.parameters.subject = template.parameters.subject;
+            }
+            template.parameters = args.parameters as TemplateParameters;
+          }
+          if (args.isActive !== undefined) template.isActive = args.isActive;
+          
+          // 更新版本和时间
+          template.version += 1;
+          template.updatedAt = new Date();
+
+          // 验证更新后的模板
+          validateTemplate(template);
+
+          // 保存到文件系统
+          await saveTemplateToFS(template);
+
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: `更新成功: ${template.name}`,
               },
             ],
             structuredContent: {
@@ -529,208 +811,108 @@ export function registerTemplateTools(server: McpServer) {
                 category: template.category,
                 version: template.version,
                 createdAt: template.createdAt,
+                updatedAt: template.updatedAt,
                 parameters: template.parameters,
-                analysis: analysis,
+                isActive: template.isActive,
               },
             },
           };
-        } else {
-          // 使用不支持 sampling 的降级处理
-          return createTemplateFromImageWithoutSampling();
+        } catch (error) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: 'text' as const,
+                text: `更新模板失败: ${error instanceof Error ? error.message : '未知错误'}`,
+              },
+            ],
+          };
         }
-      } catch (error) {
-        // 捕获和处理错误
-        if (error instanceof TemplateError) {
-          throw error;
-        }
-        
-        throw new TemplateError(
-          TemplateErrorType.INTERNAL_ERROR,
-          '从图片创建模板失败',
-          error
-        );
       }
-    }
-  );
-
-  // 定义更新模板参数
-  const UpdateTemplateParams = {
-    id: {
-      type: 'string',
-      description: '模板ID',
-    },
-    name: {
-      type: 'string',
-      description: '模板名称',
-      minLength: 1,
-      maxLength: 100,
-      optional: true,
-    },
-    description: {
-      type: 'string',
-      description: '模板描述',
-      maxLength: 500,
-      optional: true,
-    },
-    category: {
-      type: 'string',
-      description: '模板分类',
-      enum: ['children-book', 'tech-doc', 'marketing'],
-      optional: true,
-    },
-    parameters: {
-      type: 'object',
-      description: '模板参数',
-      optional: true,
-    },
-    isActive: {
-      type: 'boolean',
-      description: '是否激活',
-      optional: true,
-    },
-  };
-
-  // 注册 updateTemplate 工具
-  server.tool(
-    'updateTemplate',
-    {
-      title: '更新模板',
-      description: '更新现有的提示词模板',
-      parameters: UpdateTemplateParams,
-    },
-    async (args: { [key: string]: any }) => {
-      try {
-        // 查找模板
-        const templateIndex = templates.findIndex(t => t.id === args.id);
-        
-        if (templateIndex === -1) {
-          throw new TemplateError(
-            TemplateErrorType.TEMPLATE_NOT_FOUND,
-            `模板 ${args.id} 不存在`
-          );
-        }
-
-        const template = templates[templateIndex];
-        
-        // 更新模板字段
-        if (args.name !== undefined) template.name = args.name;
-        if (args.description !== undefined) template.description = args.description;
-        if (args.category !== undefined) template.category = args.category as Template['category'];
-        if (args.parameters !== undefined) {
-          // 确保保留必要的 subject 字段
-          if (!args.parameters.subject && template.parameters.subject) {
-            args.parameters.subject = template.parameters.subject;
-          }
-          template.parameters = args.parameters as TemplateParameters;
-        }
-        if (args.isActive !== undefined) template.isActive = args.isActive;
-        
-        // 更新版本和时间
-        template.version += 1;
-        template.updatedAt = new Date();
-
-        // 验证更新后的模板
+    );
+    
+    console.log('正在注册 deleteTemplate 工具...');
+    // 注册 deleteTemplate 工具
+    server.tool(
+      'deleteTemplate',
+      {
+        title: '删除模板',
+        description: '删除一个提示词模板',
+        parameters: {
+          id: {
+            type: 'string',
+            description: '要删除的模板ID',
+          },
+        },
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: true,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+      },
+      async (args: { [key: string]: any }) => {
         try {
-          validateTemplate(template);
-        } catch (validationError) {
-          throw new TemplateError(
-            TemplateErrorType.INVALID_PARAMETERS,
-            '更新的模板参数无效',
-            validationError
-          );
-        }
+          // 查找模板
+          const templateIndex = templates.findIndex(t => t.id === args.id);
+          
+          if (templateIndex === -1) {
+            return {
+              isError: true,
+              content: [
+                {
+                  type: 'text' as const,
+                  text: `模板 ${args.id} 不存在`,
+                },
+              ],
+            };
+          }
 
-        // 返回结果
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `更新成功: ${template.name}`,
+          const template = templates[templateIndex];
+
+          // 从文件系统删除
+          await deleteTemplateFromFS(template);
+
+          // 从数组中删除
+          templates.splice(templateIndex, 1);
+
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: `删除成功: ${template.name}`,
+              },
+            ],
+            structuredContent: {
+              success: true,
+              id: args.id,
             },
-          ],
-          structuredContent: {
-            template: {
-              id: template.id,
-              name: template.name,
-              description: template.description,
-              category: template.category,
-              version: template.version,
-              createdAt: template.createdAt,
-              updatedAt: template.updatedAt,
-              parameters: template.parameters,
-              isActive: template.isActive,
-            },
-          },
-        };
-      } catch (error) {
-        if (error instanceof TemplateError) {
-          throw error;
+          };
+        } catch (error) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: 'text' as const,
+                text: `删除模板失败: ${error instanceof Error ? error.message : '未知错误'}`,
+              },
+            ],
+          };
         }
-        throw new TemplateError(
-          TemplateErrorType.INTERNAL_ERROR,
-          '更新模板失败',
-          error
-        );
+      }
+    );
+    
+    console.log('=== 模板工具注册完成 ===\n');
+  } catch (error) {
+    console.error('模板工具注册失败:', error);
+    if (error instanceof Error) {
+      console.error('错误详情:', error.message);
+      if (error.stack) {
+        console.error('错误堆栈:', error.stack);
       }
     }
-  );
-
-  // 定义删除模板参数
-  const DeleteTemplateParams = {
-    id: {
-      type: 'string',
-      description: '要删除的模板ID',
-    },
-  };
-
-  // 注册 deleteTemplate 工具
-  server.tool(
-    'deleteTemplate',
-    {
-      title: '删除模板',
-      description: '删除一个提示词模板',
-      parameters: DeleteTemplateParams,
-    },
-    async (args: { [key: string]: any }) => {
-      try {
-        // 查找模板
-        const templateIndex = templates.findIndex(t => t.id === args.id);
-        
-        if (templateIndex === -1) {
-          throw new TemplateError(
-            TemplateErrorType.TEMPLATE_NOT_FOUND,
-            `模板 ${args.id} 不存在`
-          );
-        }
-
-        // 从数组中删除
-        templates.splice(templateIndex, 1);
-
-        // 返回结果
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `删除成功`,
-            },
-          ],
-          structuredContent: {
-            success: true,
-            id: args.id,
-          },
-        };
-      } catch (error) {
-        if (error instanceof TemplateError) {
-          throw error;
-        }
-        throw new TemplateError(
-          TemplateErrorType.INTERNAL_ERROR,
-          '删除模板失败',
-          error
-        );
-      }
-    }
-  );
+    throw error;
+  }
 }
 
 /**
@@ -748,27 +930,6 @@ export async function createTemplateFromImageWithSampling(
   // 发起图片分析请求
   const analysisResult = await handleSamplingRequest(server, {
     messages: [
-      {
-        role: 'user',
-        content: {
-          type: 'text',
-          text: `你是一个专业的图片分析助手。请分析给定的图片，提取以下信息：
-
-1. 主体内容：图片中的主要对象或主题是什么
-2. 动作/姿态：主体在做什么，有什么特定的姿势
-3. 场景与背景：在什么环境中，包括地点、时代、天气等
-4. 视角与构图：从什么角度拍摄，如何排版
-5. 风格与媒介：使用了什么艺术风格或表现手法
-6. 细节与材质：有什么特殊的纹理或材质表现
-7. 灯光与色调：光线效果和整体色彩风格
-8. 情绪/主题氛围：传达了什么样的情感或氛围
-9. 相机或画面参数：分辨率、比例等技术细节
-10. 质量提升关键词：能提升生成质量的关键特征
-11. 需要避免的元素：不希望出现的内容或效果
-
-请以结构化的方式返回分析结果，确保每个类别都有明确的描述。如果某个类别没有明显特征，请填写"无"。`
-        }
-      },
       {
         role: 'user',
         content: {
@@ -884,4 +1045,51 @@ export function createTemplateFromImageWithoutSampling() {
       }
     }
   };
+}
+
+/**
+ * 将模板保存到文件系统
+ * @param template 要保存的模板
+ */
+async function saveTemplateToFS(template: Template): Promise<void> {
+  const categoryPath = path.join(TEMPLATES_DIR, template.category);
+  const filePath = path.join(categoryPath, `${template.id}.json`);
+  
+  try {
+    // 确保目录存在
+    await fs.mkdir(categoryPath, { recursive: true });
+    
+    // 保存文件
+    await fs.writeFile(
+      filePath,
+      JSON.stringify(template, null, 2),
+      'utf-8'
+    );
+  } catch (error) {
+    console.error(`保存模板文件失败 ${template.id}:`, error);
+    throw new TemplateError(
+      TemplateErrorType.INTERNAL_ERROR,
+      '保存模板文件失败',
+      error
+    );
+  }
+}
+
+/**
+ * 从文件系统删除模板
+ * @param template 要删除的模板
+ */
+async function deleteTemplateFromFS(template: Template): Promise<void> {
+  const filePath = path.join(TEMPLATES_DIR, template.category, `${template.id}.json`);
+  
+  try {
+    await fs.unlink(filePath);
+  } catch (error) {
+    console.error(`删除模板文件失败 ${template.id}:`, error);
+    throw new TemplateError(
+      TemplateErrorType.INTERNAL_ERROR,
+      '删除模板文件失败',
+      error
+    );
+  }
 }
