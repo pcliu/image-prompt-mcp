@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "image-prompt-mcp": {
+      "command": "npx",
+      "args": [
+        "node",
+        "dist/index.js"
+      ],
+      "cwd": "/Users/liupengcheng/Documents/Code/image-prompt-mcp",
+      "description": "图像提示词生成和管理服务器"
+    }
+  }
+} 

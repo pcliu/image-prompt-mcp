@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerImageGenerationTool } from './tools/images.js';
+import { registerTemplateTools } from "./tools/templates.js";
 
 async function main() {
   try {
@@ -13,6 +14,7 @@ async function main() {
 
     // 注册工具
     registerImageGenerationTool(server);
+    registerTemplateTools(server);
 
     // 创建并连接 stdio 传输层
     const transport = new StdioServerTransport();
