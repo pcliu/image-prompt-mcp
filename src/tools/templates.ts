@@ -5,6 +5,13 @@ import { checkSamplingSupport, checkDetailedSamplingCapabilities } from '../samp
 import { handleSamplingRequest, SamplingCreateMessageResponse, Message, MessageContent, SamplingServer } from '../sampling/handler.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
+import * as os from 'os';
+import log, { LogCategory } from '../utils/logger.js';
+
+// ESM 兼容的 __dirname 替代方案
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // 定义错误类型
 export enum TemplateErrorType {
@@ -189,35 +196,163 @@ const CreateTemplateFromImageParams = {
   },
 };
 
+// 定义获取模板目录的函数
+function getTemplatesDir(): string {
+  // 1. 优先使用环境变量
+  if (process.env.TEMPLATES_DIR) {
+    return process.env.TEMPLATES_DIR;
+  }
+
+  // 2. 使用基于项目根目录的路径
+  // 从 src/tools 向上两级到项目根目录，再到 templates
+  const projectRootDir = path.resolve(__dirname, '..', '..');
+  const templatesDir = path.join(projectRootDir, 'templates');
+
+  return templatesDir;
+}
+
 // 定义模板目录
-const TEMPLATES_DIR = path.join(process.cwd(), 'templates');
+let TEMPLATES_DIR = getTemplatesDir();
+
+// 确保模板目录存在
+async function ensureTemplatesDir() {
+  try {
+    // 详细记录路径信息，以便调试
+    log.info('模板目录路径信息', {
+      category: LogCategory.TEMPLATE,
+      operation: 'init',
+      moduleUrl: import.meta.url,
+      moduleDirname: __dirname,
+      templatesDir: TEMPLATES_DIR,
+      projectRoot: path.resolve(__dirname, '..', '..'),
+      workingDir: process.cwd()
+    });
+    
+    // 创建主目录
+    await fs.mkdir(TEMPLATES_DIR, { recursive: true });
+    
+    // 确保每个分类目录都存在
+    const categories = ['children-book', 'tech-doc', 'marketing'];
+    await Promise.all(categories.map(category => 
+      fs.mkdir(path.join(TEMPLATES_DIR, category), { recursive: true })
+    ));
+    
+    log.info('模板目录初始化完成', {
+      category: LogCategory.TEMPLATE,
+      operation: 'init',
+      templatesDir: TEMPLATES_DIR,
+      categories
+    });
+    
+    return true;
+  } catch (error) {
+    log.error('模板目录初始化失败', {
+      category: LogCategory.TEMPLATE,
+      operation: 'init',
+      templatesDir: TEMPLATES_DIR,
+      errorCode: (error as any).code,
+      errorPath: (error as any).path
+    }, error as Error);
+    
+    // 尝试备用路径
+    try {
+      // 备用方案1: 使用临时目录
+      const tempDir = path.join(os.tmpdir(), 'image-prompt-mcp', 'templates');
+      log.warn('尝试使用临时目录作为模板目录', {
+        category: LogCategory.TEMPLATE,
+        operation: 'init',
+        backupTempDir: tempDir
+      });
+      
+      await fs.mkdir(tempDir, { recursive: true });
+      
+      // 确保分类目录存在
+      const categories = ['children-book', 'tech-doc', 'marketing'];
+      await Promise.all(categories.map(category => 
+        fs.mkdir(path.join(tempDir, category), { recursive: true })
+      ));
+      
+      // 更新模板目录
+      TEMPLATES_DIR = tempDir;
+      
+      log.info('临时模板目录创建成功', {
+        category: LogCategory.TEMPLATE,
+        operation: 'init',
+        templatesDir: TEMPLATES_DIR
+      });
+      
+      return true;
+    } catch (backupError) {
+      log.error('所有备用路径都创建失败', {
+        category: LogCategory.TEMPLATE,
+        operation: 'init'
+      }, backupError as Error);
+      throw error; // 抛出原始错误
+    }
+  }
+}
 
 // 从文件系统加载模板
 async function loadTemplatesFromFS(): Promise<Template[]> {
   const loadedTemplates: Template[] = [];
-  console.log('开始加载模板...');
   
   try {
-    console.log(`正在从目录加载模板: ${TEMPLATES_DIR}`);
+    // 确保模板目录存在
+    const dirInitialized = await ensureTemplatesDir();
+    if (!dirInitialized) {
+      log.error('模板目录初始化失败，无法加载模板', {
+        category: LogCategory.TEMPLATE,
+        operation: 'load'
+      });
+      return loadedTemplates; // 返回空数组
+    }
+    
+    log.info('开始加载模板', {
+      category: LogCategory.TEMPLATE,
+      operation: 'load',
+      templatesDir: TEMPLATES_DIR
+    });
+
     // 读取所有类别目录
     const categories = await fs.readdir(TEMPLATES_DIR);
-    console.log(`发现 ${categories.length} 个分类目录:`, categories);
+    log.debug('发现模板分类目录', {
+      category: LogCategory.TEMPLATE,
+      operation: 'load',
+      categoriesCount: categories.length,
+      categories
+    });
     
     for (const category of categories) {
       const categoryPath = path.join(TEMPLATES_DIR, category);
       const stat = await fs.stat(categoryPath);
       
       if (stat.isDirectory()) {
-        console.log(`\n处理分类目录: ${category}`);
-        // 读取该类别下的所有模板文件
+        log.debug(`处理分类目录: ${category}`, {
+          category: LogCategory.TEMPLATE,
+          operation: 'load',
+          processingCategory: category,
+          categoryPath
+        });
+        
         const files = await fs.readdir(categoryPath);
-        console.log(`发现 ${files.length} 个文件:`, files);
+        log.debug(`分类目录文件列表`, {
+          category: LogCategory.TEMPLATE,
+          operation: 'load',
+          processingCategory: category,
+          filesCount: files.length,
+          files
+        });
         
         for (const file of files) {
           if (file.endsWith('.json')) {
             try {
               const filePath = path.join(categoryPath, file);
-              console.log(`\n正在加载模板文件: ${filePath}`);
+              log.debug(`加载模板文件`, {
+                category: LogCategory.TEMPLATE,
+                operation: 'load',
+                filePath
+              });
+              
               const content = await fs.readFile(filePath, 'utf-8');
               const templateData = JSON.parse(content);
               
@@ -229,49 +364,56 @@ async function loadTemplatesFromFS(): Promise<Template[]> {
               templateData.updatedAt = new Date(templateData.updatedAt || Date.now());
               templateData.isActive = templateData.isActive ?? true;
               
-              console.log('正在验证模板:', {
-                id: templateData.id,
-                name: templateData.name,
-                category: templateData.category
+              log.debug('验证模板', {
+                category: LogCategory.TEMPLATE,
+                operation: 'validate',
+                templateId: templateData.id,
+                templateName: templateData.name,
+                templateCategory: templateData.category
               });
               
               // 验证模板
               validateTemplate(templateData);
               
               loadedTemplates.push(templateData as Template);
-              console.log('模板加载成功 ✅');
+              log.info('模板加载成功', {
+                category: LogCategory.TEMPLATE,
+                operation: 'load',
+                templateId: templateData.id,
+                templateName: templateData.name,
+                templateCategory: templateData.category
+              });
             } catch (error) {
-              console.error(`加载模板文件失败 ${file}:`, error);
-              if (error instanceof Error) {
-                console.error('错误详情:', error.message);
-                if (error.stack) {
-                  console.error('错误堆栈:', error.stack);
-                }
-              }
+              log.error(`加载模板文件失败`, {
+                category: LogCategory.TEMPLATE,
+                operation: 'load',
+                file,
+                categoryPath
+              }, error as Error);
             }
           }
         }
       }
     }
   } catch (error) {
-    console.error('加载模板目录失败:', error);
-    if (error instanceof Error) {
-      console.error('错误详情:', error.message);
-      if (error.stack) {
-        console.error('错误堆栈:', error.stack);
-      }
-    }
+    log.error('加载模板目录失败', {
+      category: LogCategory.TEMPLATE,
+      operation: 'load',
+      templatesDir: TEMPLATES_DIR
+    }, error as Error);
+    throw error;
   }
   
-  console.log(`\n模板加载完成，共加载 ${loadedTemplates.length} 个模板`);
-  if (loadedTemplates.length > 0) {
-    console.log('已加载的模板列表:');
-    loadedTemplates.forEach((template, index) => {
-      console.log(`${index + 1}. ${template.name} (${template.category})`);
-    });
-  } else {
-    console.warn('警告：没有加载到任何模板！');
-  }
+  log.info('模板加载完成', {
+    category: LogCategory.TEMPLATE,
+    operation: 'load',
+    totalTemplates: loadedTemplates.length,
+    templates: loadedTemplates.map(t => ({
+      id: t.id,
+      name: t.name,
+      category: t.category
+    }))
+  });
   
   return loadedTemplates;
 }
@@ -281,22 +423,25 @@ let templates: Template[] = [];
 
 // 加载模板函数
 export async function initializeTemplates() {
-  console.log('\n=== 开始初始化模板系统 ===');
-  console.log('当前工作目录:', process.cwd());
-  console.log('模板目录:', TEMPLATES_DIR);
+  log.info('开始初始化模板系统', {
+    category: LogCategory.TEMPLATE,
+    operation: 'initialize',
+    workingDirectory: process.cwd(),
+    templatesDir: TEMPLATES_DIR
+  });
   
   try {
     templates = await loadTemplatesFromFS();
-    console.log(`=== 模板系统初始化完成，共加载 ${templates.length} 个模板 ===\n`);
+    log.info('模板系统初始化完成', {
+      category: LogCategory.TEMPLATE,
+      operation: 'initialize',
+      totalTemplates: templates.length
+    });
   } catch (error) {
-    console.error('模板系统初始化失败:', error);
-    if (error instanceof Error) {
-      console.error('错误详情:', error.message);
-      if (error.stack) {
-        console.error('错误堆栈:', error.stack);
-      }
-    }
-    // 重新抛出错误，让上层处理
+    log.error('模板系统初始化失败', {
+      category: LogCategory.TEMPLATE,
+      operation: 'initialize'
+    }, error as Error);
     throw error;
   }
 }
@@ -381,13 +526,21 @@ export function getTemplateById(id: string, version?: number): Template {
  * @param server MCP 服务器实例
  */
 export async function registerTemplateTools(server: McpServer) {
-  console.log('\n=== 开始注册模板工具 ===');
+  log.info('开始注册模板工具', {
+    category: LogCategory.TEMPLATE,
+    operation: 'register_tools'
+  });
   
   try {
     // 初始化模板
     await initializeTemplates();
     
-    console.log('正在注册 listTemplates 工具...');
+    log.debug('注册 listTemplates 工具', {
+      category: LogCategory.TEMPLATE,
+      operation: 'register_tool',
+      tool: 'listTemplates'
+    });
+    
     // 注册 listTemplates 工具
     server.tool(
       'listTemplates',
@@ -416,6 +569,12 @@ export async function registerTemplateTools(server: McpServer) {
         try {
           const params: ListTemplatesParamsType = args as ListTemplatesParamsType;
           
+          log.info('执行列出模板操作', {
+            category: LogCategory.TEMPLATE,
+            operation: 'list',
+            params
+          });
+
           // 应用过滤
           let filteredTemplates = templates.filter(template => {
             if (params.isActive !== undefined && template.isActive !== params.isActive) {
@@ -468,6 +627,17 @@ export async function registerTemplateTools(server: McpServer) {
             });
           }
 
+          log.info('模板列表获取成功', {
+            category: LogCategory.TEMPLATE,
+            operation: 'list',
+            totalResults: filteredTemplates.length,
+            filters: {
+              category: params.category,
+              search: params.search,
+              isActive: params.isActive
+            }
+          });
+
           return {
             content: [
               {
@@ -477,6 +647,12 @@ export async function registerTemplateTools(server: McpServer) {
             ]
           };
         } catch (error) {
+          log.error('获取模板列表失败', {
+            category: LogCategory.TEMPLATE,
+            operation: 'list',
+            params: args
+          }, error as Error);
+
           // 根据 MCP 规范处理错误
           if (error instanceof z.ZodError) {
             return {
@@ -902,8 +1078,16 @@ export async function registerTemplateTools(server: McpServer) {
       }
     );
     
-    console.log('=== 模板工具注册完成 ===\n');
+    log.info('模板工具注册完成', {
+      category: LogCategory.TEMPLATE,
+      operation: 'register_tools',
+      registeredTools: ['listTemplates', 'getTemplate', 'createTemplate', 'createTemplateFromImage', 'updateTemplate', 'deleteTemplate']
+    });
   } catch (error) {
+    log.error('模板工具注册失败', {
+      category: LogCategory.TEMPLATE,
+      operation: 'register_tools'
+    }, error as Error);
     console.error('模板工具注册失败:', error);
     if (error instanceof Error) {
       console.error('错误详情:', error.message);
