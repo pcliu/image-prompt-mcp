@@ -542,49 +542,49 @@ export async function registerTemplateTools(server: McpServer) {
     });
     
     // 注册 listTemplates 工具
-    server.tool(
+    server.registerTool(
       'listTemplates',
       {
-        title: '列出模板',
         description: '列出所有可用的提示词模板',
-        parameters: {
+        inputSchema: {
           sortBy: z.enum(['name', 'createdAt', 'updatedAt']).optional().default('createdAt').describe('排序字段'),
           sortOrder: z.enum(['asc', 'desc']).optional().default('desc').describe('排序顺序'),
           category: z.string().optional().describe('模板分类'),
           search: z.string().optional().describe('搜索关键词'),
-          isActive: z.boolean().optional().default(true).describe('是否激活'),
-        },
-        annotations: {
-          readOnlyHint: true,
-          openWorldHint: false,
-          idempotentHint: true,
+          isActive: z.boolean().optional().default(true).describe('是否激活')
         },
         outputSchema: {
-          content: z.array(
-            z.object({ type: z.literal('text'), text: z.string() })
-          ),
-        },
+          total: z.number(),
+          templates: z.array(z.object({
+            id: z.string(),
+            name: z.string(),
+            description: z.string(),
+            category: z.enum(['children-book', 'tech-doc', 'marketing']),
+            version: z.number(),
+            createdAt: z.date(),
+            updatedAt: z.date(),
+            isActive: z.boolean()
+          }))
+        }
       },
-      async (args: { [key: string]: any }, extra) => {
+      async (args: ListTemplatesParamsType, extra) => {
         try {
-          const params: ListTemplatesParamsType = args as ListTemplatesParamsType;
-          
           log.info('执行列出模板操作', {
             category: LogCategory.TEMPLATE,
             operation: 'list',
-            params
+            params: args
           });
 
           // 应用过滤
           let filteredTemplates = templates.filter(template => {
-            if (params.isActive !== undefined && template.isActive !== params.isActive) {
+            if (args.isActive !== undefined && template.isActive !== args.isActive) {
               return false;
             }
-            if (params.category && template.category !== params.category) {
+            if (args.category && template.category !== args.category) {
               return false;
             }
-            if (params.search) {
-              const searchLower = params.search.toLowerCase();
+            if (args.search) {
+              const searchLower = args.search.toLowerCase();
               return (
                 template.name.toLowerCase().includes(searchLower) ||
                 template.description.toLowerCase().includes(searchLower)
@@ -595,8 +595,8 @@ export async function registerTemplateTools(server: McpServer) {
 
           // 应用排序
           filteredTemplates.sort((a, b) => {
-            const sortBy = params.sortBy;
-            const sortOrder = params.sortOrder === 'asc' ? 1 : -1;
+            const sortBy = args.sortBy;
+            const sortOrder = args.sortOrder === 'asc' ? 1 : -1;
 
             if (sortBy === 'name') {
               return sortOrder * a.name.localeCompare(b.name);
@@ -610,31 +610,46 @@ export async function registerTemplateTools(server: McpServer) {
             return 0;
           });
 
-          // 构建文本输出（无分页）
-          let output = `找到 ${filteredTemplates.length} 个模板\n\n`;
+          // 构建输出
+          const structuredContent = {
+            total: filteredTemplates.length,
+            templates: filteredTemplates.map(template => ({
+              id: template.id,
+              name: template.name,
+              description: template.description,
+              category: template.category,
+              version: template.version,
+              createdAt: template.createdAt,
+              updatedAt: template.updatedAt,
+              isActive: template.isActive
+            }))
+          };
 
-          if (filteredTemplates.length === 0) {
-            output += '没有找到匹配的模板。';
+          // 构建文本输出
+          let textOutput = `找到 ${structuredContent.total} 个模板\n\n`;
+
+          if (structuredContent.total === 0) {
+            textOutput += '没有找到匹配的模板。';
           } else {
-            filteredTemplates.forEach((template, index) => {
-              output += `${index + 1}. ${template.name}\n`;
-              output += `   ID: ${template.id}\n`;
-              output += `   分类: ${template.category}\n`;
-              output += `   描述: ${template.description}\n`;
-              output += `   版本: ${template.version}\n`;
-              output += `   创建时间: ${template.createdAt.toLocaleString()}\n`;
-              output += `   更新时间: ${template.updatedAt.toLocaleString()}\n\n`;
+            structuredContent.templates.forEach((template, index) => {
+              textOutput += `${index + 1}. ${template.name}\n`;
+              textOutput += `   ID: ${template.id}\n`;
+              textOutput += `   分类: ${template.category}\n`;
+              textOutput += `   描述: ${template.description}\n`;
+              textOutput += `   版本: ${template.version}\n`;
+              textOutput += `   创建时间: ${template.createdAt.toLocaleString()}\n`;
+              textOutput += `   更新时间: ${template.updatedAt.toLocaleString()}\n\n`;
             });
           }
 
           log.info('模板列表获取成功', {
             category: LogCategory.TEMPLATE,
             operation: 'list',
-            totalResults: filteredTemplates.length,
+            totalResults: structuredContent.total,
             filters: {
-              category: params.category,
-              search: params.search,
-              isActive: params.isActive
+              category: args.category,
+              search: args.search,
+              isActive: args.isActive
             }
           });
 
@@ -642,9 +657,10 @@ export async function registerTemplateTools(server: McpServer) {
             content: [
               {
                 type: 'text' as const,
-                text: output
+                text: textOutput
               }
-            ]
+            ],
+            structuredContent
           };
         } catch (error) {
           log.error('获取模板列表失败', {
@@ -653,26 +669,14 @@ export async function registerTemplateTools(server: McpServer) {
             params: args
           }, error as Error);
 
-          // 根据 MCP 规范处理错误
-          if (error instanceof z.ZodError) {
-            return {
-              isError: true,
-              content: [
-                {
-                  type: 'text' as const,
-                  text: `参数验证失败: ${error.message}`
-                }
-              ]
-            };
-          }
           return {
-            isError: true,
             content: [
               {
                 type: 'text' as const,
                 text: `获取模板列表失败: ${error instanceof Error ? error.message : '未知错误'}`
               }
-            ]
+            ],
+            isError: true
           };
         }
       }
@@ -680,11 +684,37 @@ export async function registerTemplateTools(server: McpServer) {
     
     console.log('正在注册 getTemplate 工具...');
     // 注册 getTemplate 工具
-    server.tool(
+    server.registerTool(
       'getTemplate',
       {
-        templateId: z.string().describe('模板ID'),
-        version: z.number().int().positive().optional().describe('模板版本号')
+        description: '获取指定模板的详细定义',
+        inputSchema: {
+          templateId: z.string().describe('模板ID'),
+          version: z.number().int().positive().optional().describe('模板版本号')
+        },
+        outputSchema: {
+          id: z.string(),
+          name: z.string(),
+          description: z.string(),
+          category: z.enum(['children-book', 'tech-doc', 'marketing']),
+          parameters: z.object({
+            subject: z.string(),
+            action: z.string().optional(),
+            environment: z.string().optional(),
+            cameraAngle: z.string().optional(),
+            style: z.string().optional(),
+            details: z.string().optional(),
+            lighting: z.string().optional(),
+            mood: z.string().optional(),
+            technical: z.string().optional(),
+            quality: z.string().optional(),
+            negativePrompt: z.string().optional()
+          }),
+          version: z.number(),
+          createdAt: z.date(),
+          updatedAt: z.date(),
+          isActive: z.boolean()
+        }
       },
       async (args: { templateId: string, version?: number }, extra) => {
         try {
@@ -704,7 +734,8 @@ export async function registerTemplateTools(server: McpServer) {
                 type: 'text' as const,
                 text: JSON.stringify(template, null, 2)
               }
-            ]
+            ],
+            structuredContent: template
           };
         } catch (error) {
           if (error instanceof TemplateError) {
@@ -725,20 +756,53 @@ export async function registerTemplateTools(server: McpServer) {
     
     console.log('正在注册 createTemplate 工具...');
     // 注册 createTemplate 工具
-    server.tool(
+    server.registerTool(
       'createTemplate',
       {
-        title: '创建模板',
         description: '创建一个新的提示词模板',
-        parameters: CreateTemplateParams,
-        annotations: {
-          readOnlyHint: false,
-          destructiveHint: false,
-          idempotentHint: false,
-          openWorldHint: false,
+        inputSchema: {
+          name: z.string().min(1).max(100).describe('模板名称'),
+          description: z.string().max(500).describe('模板描述'),
+          category: z.enum(['children-book', 'tech-doc', 'marketing']).describe('模板分类'),
+          parameters: z.object({
+            subject: z.string().min(1).describe('主体内容 - 明确"画什么"'),
+            action: z.string().optional().describe('动作/姿态 - 如果主体在做事或有特定姿势'),
+            environment: z.string().optional().describe('场景与背景 - 交代地点、时代、天气、室内外等'),
+            cameraAngle: z.string().optional().describe('视角与构图 - 决定"从哪看"与"怎么排版"'),
+            style: z.string().optional().describe('风格与媒介 - 让模型模仿特定艺术语言'),
+            details: z.string().optional().describe('细节与材质 - 增加纹理和真实感'),
+            lighting: z.string().optional().describe('灯光与色调 - 左右画面氛围'),
+            mood: z.string().optional().describe('情绪/主题氛围 - 传达整体情感'),
+            technical: z.string().optional().describe('相机或画面参数 - 控制分辨率、镜头、比例'),
+            quality: z.string().optional().describe('质量与排行榜关键词 - 暗示"高水准"'),
+            negativePrompt: z.string().optional().describe('负面提示 - 明确"不要什么"')
+          }).describe('模板参数')
         },
+        outputSchema: {
+          template: z.object({
+            id: z.string(),
+            name: z.string(),
+            description: z.string(),
+            category: z.enum(['children-book', 'tech-doc', 'marketing']),
+            version: z.number(),
+            createdAt: z.date(),
+            parameters: z.object({
+              subject: z.string(),
+              action: z.string().optional(),
+              environment: z.string().optional(),
+              cameraAngle: z.string().optional(),
+              style: z.string().optional(),
+              details: z.string().optional(),
+              lighting: z.string().optional(),
+              mood: z.string().optional(),
+              technical: z.string().optional(),
+              quality: z.string().optional(),
+              negativePrompt: z.string().optional()
+            })
+          })
+        }
       },
-      async (args: { [key: string]: any }, extra) => {
+      async (args: CreateTemplateParamsType) => {
         try {
           // 创建新模板
           const newTemplate: Template = {
@@ -766,8 +830,8 @@ export async function registerTemplateTools(server: McpServer) {
             content: [
               {
                 type: 'text' as const,
-                text: `成功创建模板: ${newTemplate.name}`,
-              },
+                text: `成功创建模板: ${newTemplate.name}`
+              }
             ],
             structuredContent: {
               template: {
@@ -777,19 +841,19 @@ export async function registerTemplateTools(server: McpServer) {
                 category: newTemplate.category,
                 version: newTemplate.version,
                 createdAt: newTemplate.createdAt,
-                parameters: newTemplate.parameters,
-              },
-            },
+                parameters: newTemplate.parameters
+              }
+            }
           };
         } catch (error) {
           return {
-            isError: true,
             content: [
               {
                 type: 'text' as const,
-                text: `创建模板失败: ${error instanceof Error ? error.message : '未知错误'}`,
-              },
+                text: `创建模板失败: ${error instanceof Error ? error.message : '未知错误'}`
+              }
             ],
+            isError: true
           };
         }
       }
@@ -797,10 +861,42 @@ export async function registerTemplateTools(server: McpServer) {
     
     console.log('正在注册 createTemplateFromImage 工具...');
     // 注册 createTemplateFromImage 工具
-    server.tool(
+    server.registerTool(
       'createTemplateFromImage',
-      CreateTemplateFromImageParams,
-      async (args: { [key: string]: any }, extra) => {
+      {
+        description: '从图片创建提示词模板',
+        inputSchema: {
+          imageUrl: z.string().describe('图片的本地地址'),
+          name: z.string().min(1).max(100).optional().describe('模板名称'),
+          description: z.string().max(500).optional().describe('模板描述'),
+          category: z.enum(['children-book', 'tech-doc', 'marketing']).optional().describe('模板分类')
+        },
+        outputSchema: {
+          template: z.object({
+            id: z.string(),
+            name: z.string(),
+            description: z.string(),
+            category: z.enum(['children-book', 'tech-doc', 'marketing']),
+            version: z.number(),
+            createdAt: z.date(),
+            parameters: z.object({
+              subject: z.string(),
+              action: z.string().optional(),
+              environment: z.string().optional(),
+              cameraAngle: z.string().optional(),
+              style: z.string().optional(),
+              details: z.string().optional(),
+              lighting: z.string().optional(),
+              mood: z.string().optional(),
+              technical: z.string().optional(),
+              quality: z.string().optional(),
+              negativePrompt: z.string().optional()
+            })
+          }),
+          analysis: z.string()
+        }
+      },
+      async (args: { imageUrl: string, name?: string, description?: string, category?: TemplateCategory }, extra) => {
         try {
           // 检查客户端 sampling 支持
           const capabilities = checkDetailedSamplingCapabilities(extra);
@@ -810,7 +906,7 @@ export async function registerTemplateTools(server: McpServer) {
             // 使用支持 sampling 的方式生成模板
             const { template, analysis } = await createTemplateFromImageWithSampling(
               server as unknown as SamplingServer,
-              args as { imageUrl: string, name?: string, description?: string, category?: TemplateCategory }
+              args
             );
 
             // 返回结果
@@ -818,12 +914,12 @@ export async function registerTemplateTools(server: McpServer) {
               content: [
                 {
                   type: 'text' as const,
-                  text: `成功从图片创建模板: ${template.name}`,
+                  text: `成功从图片创建模板: ${template.name}`
                 },
                 {
                   type: 'text' as const,
-                  text: '图片分析结果：\n' + analysis,
-                },
+                  text: '图片分析结果：\n' + analysis
+                }
               ],
               structuredContent: {
                 template: {
@@ -833,78 +929,91 @@ export async function registerTemplateTools(server: McpServer) {
                   category: template.category,
                   version: template.version,
                   createdAt: template.createdAt,
-                  parameters: template.parameters,
-                  analysis: analysis,
+                  parameters: template.parameters
                 },
-              },
+                analysis
+              }
             };
           } else {
             // 使用不支持 sampling 的降级处理
-            return createTemplateFromImageWithoutSampling();
+            const result = createTemplateFromImageWithoutSampling();
+            return {
+              content: result.content,
+              structuredContent: {
+                error: 'SAMPLING_NOT_SUPPORTED',
+                message: '客户端不支持图片分析功能，请参考指南手动创建模板'
+              },
+              isError: true
+            };
           }
         } catch (error) {
-          // 捕获和处理错误
           if (error instanceof TemplateError) {
-            throw error;
+            return {
+              content: [
+                {
+                  type: 'text' as const,
+                  text: error.message
+                }
+              ],
+              isError: true
+            };
           }
-          
-          throw new TemplateError(
-            TemplateErrorType.INTERNAL_ERROR,
-            '从图片创建模板失败',
-            error
-          );
+          throw error;
         }
       }
     );
     
     console.log('正在注册 updateTemplate 工具...');
     // 注册 updateTemplate 工具
-    server.tool(
+    server.registerTool(
       'updateTemplate',
       {
-        title: '更新模板',
         description: '更新现有的提示词模板',
-        parameters: {
-          id: {
-            type: 'string',
-            description: '模板ID',
-          },
-          name: {
-            type: 'string',
-            description: '模板名称',
-            minLength: 1,
-            maxLength: 100,
-            optional: true,
-          },
-          description: {
-            type: 'string',
-            description: '模板描述',
-            maxLength: 500,
-            optional: true,
-          },
-          category: {
-            type: 'string',
-            description: '模板分类',
-            enum: ['children-book', 'tech-doc', 'marketing'],
-            optional: true,
-          },
-          parameters: {
-            type: 'object',
-            description: '模板参数',
-            optional: true,
-          },
-          isActive: {
-            type: 'boolean',
-            description: '是否激活',
-            optional: true,
-          },
+        inputSchema: {
+          id: z.string().describe('模板ID'),
+          name: z.string().min(1).max(100).optional().describe('模板名称'),
+          description: z.string().max(500).optional().describe('模板描述'),
+          category: z.enum(['children-book', 'tech-doc', 'marketing']).optional().describe('模板分类'),
+          parameters: z.object({
+            subject: z.string().min(1).describe('主体内容'),
+            action: z.string().optional(),
+            environment: z.string().optional(),
+            cameraAngle: z.string().optional(),
+            style: z.string().optional(),
+            details: z.string().optional(),
+            lighting: z.string().optional(),
+            mood: z.string().optional(),
+            technical: z.string().optional(),
+            quality: z.string().optional(),
+            negativePrompt: z.string().optional()
+          }).optional().describe('模板参数'),
+          isActive: z.boolean().optional().describe('是否激活')
         },
-        annotations: {
-          readOnlyHint: false,
-          destructiveHint: false,
-          idempotentHint: true,
-          openWorldHint: false,
-        },
+        outputSchema: {
+          template: z.object({
+            id: z.string(),
+            name: z.string(),
+            description: z.string(),
+            category: z.enum(['children-book', 'tech-doc', 'marketing']),
+            version: z.number(),
+            createdAt: z.date(),
+            updatedAt: z.date(),
+            parameters: z.object({
+              subject: z.string(),
+              action: z.string().optional(),
+              environment: z.string().optional(),
+              cameraAngle: z.string().optional(),
+              style: z.string().optional(),
+              details: z.string().optional(),
+              lighting: z.string().optional(),
+              mood: z.string().optional(),
+              technical: z.string().optional(),
+              quality: z.string().optional(),
+              negativePrompt: z.string().optional()
+            }),
+            isActive: z.boolean()
+          })
+        }
       },
       async (args: { [key: string]: any }) => {
         try {
@@ -913,13 +1022,13 @@ export async function registerTemplateTools(server: McpServer) {
           
           if (templateIndex === -1) {
             return {
-              isError: true,
               content: [
                 {
                   type: 'text' as const,
-                  text: `模板 ${args.id} 不存在`,
-                },
+                  text: `模板 ${args.id} 不存在`
+                }
               ],
+              isError: true
             };
           }
 
@@ -952,8 +1061,8 @@ export async function registerTemplateTools(server: McpServer) {
             content: [
               {
                 type: 'text' as const,
-                text: `更新成功: ${template.name}`,
-              },
+                text: `更新成功: ${template.name}`
+              }
             ],
             structuredContent: {
               template: {
@@ -965,19 +1074,19 @@ export async function registerTemplateTools(server: McpServer) {
                 createdAt: template.createdAt,
                 updatedAt: template.updatedAt,
                 parameters: template.parameters,
-                isActive: template.isActive,
-              },
-            },
+                isActive: template.isActive
+              }
+            }
           };
         } catch (error) {
           return {
-            isError: true,
             content: [
               {
                 type: 'text' as const,
-                text: `更新模板失败: ${error instanceof Error ? error.message : '未知错误'}`,
-              },
+                text: `更新模板失败: ${error instanceof Error ? error.message : '未知错误'}`
+              }
             ],
+            isError: true
           };
         }
       }
@@ -985,38 +1094,36 @@ export async function registerTemplateTools(server: McpServer) {
     
     console.log('正在注册 deleteTemplate 工具...');
     // 注册 deleteTemplate 工具
-    server.tool(
+    server.registerTool(
       'deleteTemplate',
       {
-        title: '删除模板',
         description: '删除一个提示词模板',
-        parameters: {
-          id: {
-            type: 'string',
-            description: '要删除的模板ID',
-          },
+        inputSchema: {
+          id: z.string().describe('要删除的模板ID')
         },
-        annotations: {
-          readOnlyHint: false,
-          destructiveHint: true,
-          idempotentHint: true,
-          openWorldHint: false,
-        },
+        outputSchema: {
+          success: z.boolean(),
+          id: z.string()
+        }
       },
-      async (args: { [key: string]: any }) => {
+      async (args: { id: string }) => {
         try {
           // 查找模板
           const templateIndex = templates.findIndex(t => t.id === args.id);
           
           if (templateIndex === -1) {
             return {
-              isError: true,
               content: [
                 {
                   type: 'text' as const,
-                  text: `模板 ${args.id} 不存在`,
-                },
+                  text: `模板 ${args.id} 不存在`
+                }
               ],
+              isError: true,
+              structuredContent: {
+                success: false,
+                id: args.id
+              }
             };
           }
 
@@ -1032,23 +1139,27 @@ export async function registerTemplateTools(server: McpServer) {
             content: [
               {
                 type: 'text' as const,
-                text: `删除成功: ${template.name}`,
-              },
+                text: `删除成功: ${template.name}`
+              }
             ],
             structuredContent: {
               success: true,
-              id: args.id,
-            },
+              id: args.id
+            }
           };
         } catch (error) {
           return {
-            isError: true,
             content: [
               {
                 type: 'text' as const,
-                text: `删除模板失败: ${error instanceof Error ? error.message : '未知错误'}`,
-              },
+                text: `删除模板失败: ${error instanceof Error ? error.message : '未知错误'}`
+              }
             ],
+            isError: true,
+            structuredContent: {
+              success: false,
+              id: args.id
+            }
           };
         }
       }
