@@ -547,7 +547,7 @@ export async function registerTemplateTools(server: McpServer) {
       {
         title: '列出模板',
         description: '列出所有可用的提示词模板',
-        inputSchema: {
+        parameters: {
           sortBy: z.enum(['name', 'createdAt', 'updatedAt']).optional().default('createdAt').describe('排序字段'),
           sortOrder: z.enum(['asc', 'desc']).optional().default('desc').describe('排序顺序'),
           category: z.string().optional().describe('模板分类'),
@@ -682,67 +682,43 @@ export async function registerTemplateTools(server: McpServer) {
     // 注册 getTemplate 工具
     server.tool(
       'getTemplate',
-      GetTemplateParams,
-      async (params: GetTemplateParamsType) => {
+      {
+        templateId: z.string().describe('模板ID'),
+        version: z.number().int().positive().optional().describe('模板版本号')
+      },
+      async (args: { templateId: string, version?: number }, extra) => {
         try {
+          // 记录接收到的参数
+          log.debug('getTemplate 接收到参数', {
+            category: LogCategory.TEMPLATE,
+            operation: 'get',
+            args
+          });
+
           // 查找模板
-          const template = templates.find(t => t.id === params.id);
-          
-          if (!template) {
-            throw new TemplateError(
-              TemplateErrorType.TEMPLATE_NOT_FOUND,
-              `模板 ${params.id} 不存在`
-            );
-          }
+          const template = getTemplateById(args.templateId, args.version);
 
-          // 如果指定了版本，检查版本是否匹配
-          if (params.version && template.version !== params.version) {
-            throw new TemplateError(
-              TemplateErrorType.TEMPLATE_NOT_FOUND,
-              `模板 ${params.id} 的版本 ${params.version} 不存在`
-            );
-          }
-
-          // 返回结果
           return {
             content: [
               {
-                type: 'text',
-                text: `找到模板: ${template.name}`,
-              },
-            ],
-            structuredContent: {
-              template: {
-                ...template,
-                parameters: {
-                  ...template.parameters,
-                  // 添加每个参数的描述信息
-                  _descriptions: {
-                    subject: '主体内容 - 明确"画什么"',
-                    action: '动作/姿态 - 如果主体在做事或有特定姿势',
-                    environment: '场景与背景 - 交代地点、时代、天气、室内外等',
-                    cameraAngle: '视角与构图 - 决定"从哪看"与"怎么排版"',
-                    style: '风格与媒介 - 让模型模仿特定艺术语言',
-                    details: '细节与材质 - 增加纹理和真实感',
-                    lighting: '灯光与色调 - 左右画面氛围',
-                    mood: '情绪/主题氛围 - 传达整体情感',
-                    technical: '相机或画面参数 - 控制分辨率、镜头、比例',
-                    quality: '质量与排行榜关键词 - 暗示"高水准"',
-                    negativePrompt: '负面提示 - 明确"不要什么"',
-                  },
-                },
-              },
-            },
+                type: 'text' as const,
+                text: JSON.stringify(template, null, 2)
+              }
+            ]
           };
         } catch (error) {
           if (error instanceof TemplateError) {
-            throw error;
+            return {
+              content: [
+                {
+                  type: 'text' as const,
+                  text: error.message
+                }
+              ],
+              isError: true
+            };
           }
-          throw new TemplateError(
-            TemplateErrorType.INTERNAL_ERROR,
-            '获取模板详情失败',
-            error
-          );
+          throw error;
         }
       }
     );
