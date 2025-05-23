@@ -28,7 +28,7 @@ export class ImageGenerationError extends Error {
 // 定义图片生成参数验证模式
 const ImageGenerationParams = {
   // 模板相关参数
-  templateId: z.string().optional().describe('模板 ID，如果提供则使用模板默认参数'),
+  templateId: z.string().optional().describe('模板 ID（从 listTemplates 获取），如果提供则使用模板默认参数'),
   templateVersion: z.number().int().positive().optional().describe('模板版本'),
   
   // 基础参数
@@ -59,9 +59,31 @@ const ImageGenerationParams = {
  * @param server MCP 服务器实例
  */
 export function registerImageGenerationTool(server: McpServer & SamplingServer) {
-  server.tool(
+  server.registerTool(
     'generateImage',
-    ImageGenerationParams,
+    {
+      description: '基于模板或参数生成图片提示词，并在客户端支持时直接生成图片。建议使用流程：1) 先调用 listTemplates 查看可用模板 → 2) 调用 getTemplate 获取模板详情 → 3) 使用本工具生成图片。',
+      inputSchema: ImageGenerationParams,
+      outputSchema: {
+        // 通用字段
+        prompt: z.string().describe('生成的提示词'),
+        negativePrompt: z.string().optional().describe('负面提示词'),
+        parameters: z.object({
+          width: z.number().describe('图片宽度'),
+          height: z.number().describe('图片高度'),
+          samplingSteps: z.number().describe('采样步数')
+        }).describe('生成参数'),
+        usedTemplate: z.object({
+          id: z.string().describe('模板ID'),
+          name: z.string().describe('模板名称'),
+          version: z.number().describe('模板版本')
+        }).optional().describe('使用的模板信息'),
+        
+        // Sampling 相关字段
+        imageUrl: z.string().optional().describe('生成的图片URL（仅在支持Sampling时）'),
+        supportsSampling: z.boolean().optional().describe('是否支持Sampling功能')
+      }
+    },
     async (params, extra) => {
       try {
         // 1. 处理模板参数

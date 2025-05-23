@@ -545,7 +545,7 @@ export async function registerTemplateTools(server: McpServer) {
     server.registerTool(
       'listTemplates',
       {
-        description: '列出所有可用的提示词模板',
+        description: '列出所有可用的提示词模板。使用 generateImage 前建议先调用此工具查看可用模板，然后使用 getTemplate 获取具体模板详情。',
         inputSchema: {
           sortBy: z.enum(['name', 'createdAt', 'updatedAt']).optional().default('createdAt').describe('排序字段'),
           sortOrder: z.enum(['asc', 'desc']).optional().default('desc').describe('排序顺序'),
@@ -687,9 +687,9 @@ export async function registerTemplateTools(server: McpServer) {
     server.registerTool(
       'getTemplate',
       {
-        description: '获取指定模板的详细定义',
+        description: '获取指定模板的详细定义和参数。请先调用 listTemplates 获取模板ID，然后使用此工具查看模板的具体参数，最后在 generateImage 中使用。',
         inputSchema: {
-          templateId: z.string().describe('模板ID'),
+          templateId: z.string().describe('模板ID（从 listTemplates 获取）'),
           version: z.number().int().positive().optional().describe('模板版本号')
         },
         outputSchema: {

@@ -79,6 +79,7 @@
   - [✅] 整合模板系统
   - [✅] 更新 Client capabilities 检查
   - [✅] 优化错误处理机制
+  - [✅] 升级为新的 registerTool 接口
 - [✅] 实现 Sampling 功能 [src/sampling](mdc:src/sampling)
   - [✅] Client capabilities 检查
   - [✅] Sampling 请求处理
@@ -143,3 +144,6 @@ interface ProgressUpdate {
 - 2024-07-18: 删除所有测试代码，简化项目结构
 - 2024-07-22: 完成代码质量检查和安全检查，更新 README 文档
 - 2024-07-22: 项目构建完成，准备发布
+- 2024-12-26: 将 generateImage 工具的注册方式从旧的 server.tool 接口升级为新的 registerTool 接口，提升代码现代性和兼容性
+- 2024-12-26: 优化工具描述信息，明确使用流程：1) listTemplates 查看可用模板 → 2) getTemplate 获取模板详情 → 3) generateImage 生成图片，提升用户体验
+- 2024-12-26: 修复 generateImage 工具缺少 outputSchema 的问题，添加完整的输出结构定义以符合新 registerTool 接口的严格要求
